@@ -4,7 +4,7 @@ const GROUND_Y = 156 // top of ground strip (canvas 180, ground 24px)
 
 export const LEVEL = {
   length: 3200,
-  scrollSpeed: 1.8,
+  scrollSpeed: 2.9,
   groundY: GROUND_Y,
   // Uneven gaps: sometimes high (low gapY), sometimes low (high gapY)
   gates: [

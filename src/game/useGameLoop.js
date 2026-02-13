@@ -1,7 +1,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 
-const GRAVITY = 0.28
-const FLAP_VELOCITY = -3.2
+const GRAVITY = 0.36
+const FLAP_VELOCITY = -3.9
+const SIMULATION_SPEED = 1.7
 const KID_WIDTH = 20
 const KID_HEIGHT = 20
 const GAP_MARGIN = 3
@@ -91,8 +92,17 @@ export function useGameLoop({
     let rafId
     const gatesData = [...(level.gates || [])]
 
-    const tick = () => {
+    let lastFrameTime = null
+
+    const tick = (now) => {
       if (gameOverRef.current) return
+
+      if (lastFrameTime === null) {
+        lastFrameTime = now
+      }
+      const deltaSeconds = Math.min((now - lastFrameTime) / 1000, 1 / 30)
+      lastFrameTime = now
+      const step = deltaSeconds * 60 * SIMULATION_SPEED
 
       const k = kidRef.current
       const scr = scrollRef.current
@@ -122,8 +132,8 @@ export function useGameLoop({
         k.velY = FLAP_VELOCITY
         flapRef.current = false
       }
-      k.velY += GRAVITY
-      k.y += k.velY
+      k.velY += GRAVITY * step
+      k.y += k.velY * step
 
       if (k.y < 0 || k.y + KID_HEIGHT > groundY + GROUND_MARGIN) {
         gameOverRef.current = true
@@ -131,7 +141,7 @@ export function useGameLoop({
         return
       }
 
-      scrollRef.current = scr + scrollSpeed
+      scrollRef.current = scr + scrollSpeed * step
       const newScroll = scrollRef.current
       setScrollX(newScroll)
 

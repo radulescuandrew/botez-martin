@@ -9,7 +9,7 @@ const CANVAS_HEIGHT = 180
 
 const BOY_SPRITES_BASE = '/sprites/boy_sprites/Transparent%20PNG'
 
-export default function Game({ onReachEnd }) {
+export default function Game({ onReachEnd, attempts, username, onRetry, onBackToIntro }) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const flapRef = useRef(false)
@@ -75,6 +75,7 @@ export default function Game({ onReachEnd }) {
   const handlePointerDown = (e) => {
     e.preventDefault()
     if (gameOver) {
+      if (onRetry) onRetry()
       reset()
       setGameOver(false)
     } else {
@@ -171,7 +172,24 @@ export default function Game({ onReachEnd }) {
       aria-label="Tap to fly"
       onPointerDown={handlePointerDown}
     >
-      <p className="game-controls-hint">Tap or press space to start and fly</p>
+      {onBackToIntro && (
+        <button
+          type="button"
+          className="game-back-btn"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            onBackToIntro()
+          }}
+        >
+          Back to first page
+        </button>
+      )}
+      <p className="game-attempts">Incercari: {attempts}</p>
+      {username && <p className="game-username">Jucator: {username}</p>}
+      <p className={`game-controls-hint ${scrollX > 0 ? 'hidden' : ''}`}>
+        Tap or press space to start and fly
+      </p>
       <ParallaxBackground scrollOffset={scrollX} />
       <canvas
         ref={canvasRef}

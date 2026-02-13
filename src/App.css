@@ -20,6 +20,9 @@
   justify-content: center;
   padding: 2rem;
   text-align: center;
+  position: relative;
+  z-index: 1;
+  perspective: 900px;
 }
 
 .landing-title {
@@ -39,6 +42,36 @@
   opacity: 0.85;
 }
 
+.landing-label {
+  width: min(340px, 90vw);
+  text-align: left;
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.landing-input {
+  width: min(340px, 90vw);
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+  margin-bottom: 0.35rem;
+}
+
+.landing-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.landing-error {
+  width: min(340px, 90vw);
+  margin: 0 0 1rem;
+  color: #ff8f8f;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
 .landing-play-btn {
   padding: 0.75rem 2rem;
   font-size: 1.1rem;
@@ -52,6 +85,75 @@
 .landing-play-btn:hover {
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.landing-play-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+.blackhole-transition-3d {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 0.14s linear;
+}
+
+.blackhole-transition-3d,
+.blackhole-transition-3d * {
+  pointer-events: none !important;
+}
+
+.blackhole-transition-3d.active {
+  opacity: 1;
+}
+
+.story-sequence {
+  position: absolute;
+  inset: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 92vw;
+  max-width: 1280px;
+  overflow: hidden;
+  perspective: 520px;
+  pointer-events: none;
+}
+
+.story-line {
+  position: absolute;
+  left: 50%;
+  bottom: -8vh;
+  width: 100%;
+  margin: 0;
+  padding: 0 1rem;
+  text-align: center;
+  color: #ffe389;
+  text-shadow: 0 0 8px rgba(255, 210, 120, 0.35);
+  font-size: clamp(1.15rem, 2.5vw, 2rem);
+  line-height: 1.35;
+  transform-origin: 50% 100%;
+  animation: story-crawl-line var(--travel-duration, 5200ms) linear forwards;
+}
+
+@keyframes story-crawl-line {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) rotateX(32deg) translateY(14vh) scale(1);
+  }
+  10% {
+    opacity: 1;
+  }
+  74% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) rotateX(32deg) translateY(-160vh) scale(0.65);
+  }
 }
 
 /* Game */
@@ -70,14 +172,83 @@
 
 .game-controls-hint {
   position: absolute;
-  top: 0.5rem;
+  top: 58%;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
   margin: 0;
-  font-size: 0.5rem;
-  opacity: 0.85;
+  font-size: clamp(0.75rem, 1.45vw, 1rem);
+  opacity: 0.95;
+  color: #fff6b3;
+  text-shadow: 0 0 10px rgba(255, 231, 133, 0.45);
+  animation: controls-hint-float 1.25s ease-in-out infinite;
   pointer-events: none;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.game-controls-hint.hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-12px);
+  animation: none;
+}
+
+.game-back-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.8rem;
+  z-index: 3;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 0.5rem;
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+}
+
+.game-back-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.game-attempts {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.8rem;
+  z-index: 2;
+  margin: 0;
+  font-size: clamp(0.72rem, 1.35vw, 0.95rem);
+  opacity: 0.97;
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.game-username {
+  position: absolute;
+  top: 2rem;
+  left: 0.8rem;
+  z-index: 2;
+  margin: 0;
+  font-size: clamp(0.68rem, 1.2vw, 0.88rem);
+  opacity: 0.95;
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+@keyframes controls-hint-float {
+  0% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateX(-50%) translateY(-8px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 0.9;
+  }
 }
 
 .parallax-background {
