@@ -1,11 +1,11 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import { gsap } from 'gsap'
 import ParallaxBackground from '../components/ParallaxBackground'
 import { useGameLoop } from '../game/useGameLoop'
 import { LEVEL } from '../game/level'
 
-const CANVAS_WIDTH = 320
-const CANVAS_HEIGHT = 180
+const BASE_CANVAS_WIDTH = 320
+const BASE_CANVAS_HEIGHT = 180
 
 const BOY_SPRITES_BASE = '/sprites/boy_sprites/Transparent%20PNG'
 
@@ -15,6 +15,42 @@ export default function Game({ onReachEnd, attempts, username, onRetry, onBackTo
   const flapRef = useRef(false)
   const boySpritesRef = useRef({ idle: [], jumpUp: null, jumpFall: null })
   const [gameOver, setGameOver] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => (
+    window.matchMedia('(max-width: 900px), (pointer: coarse)').matches
+  ))
+  const logicalWidth = isMobile ? 512 : BASE_CANVAS_WIDTH
+  const logicalHeight = isMobile ? 288 : BASE_CANVAS_HEIGHT
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 900px), (pointer: coarse)')
+    const handleChange = () => setIsMobile(media.matches)
+    handleChange()
+    media.addEventListener('change', handleChange)
+    return () => media.removeEventListener('change', handleChange)
+  }, [])
+
+  const tunedLevel = useMemo(() => {
+    if (!isMobile) return LEVEL
+    const yScale = logicalHeight / BASE_CANVAS_HEIGHT
+    const mobileGroundY = logicalHeight - 14
+    return {
+      ...LEVEL,
+      groundY: mobileGroundY,
+      scrollSpeed: LEVEL.scrollSpeed * 0.82,
+      gates: LEVEL.gates.map((gate) => {
+        const scaledGapHeight = Math.round(gate.gapHeight * yScale)
+        const scaledGapY = Math.round(gate.gapY * yScale)
+        const nextGapHeight = Math.min(scaledGapHeight + 12, Math.round(logicalHeight * 0.38))
+        const maxGapY = Math.max(16, mobileGroundY - nextGapHeight - 12)
+        return {
+          ...gate,
+          width: Math.max(30, Math.round(gate.width * 0.85)),
+          gapHeight: nextGapHeight,
+          gapY: Math.min(Math.max(12, scaledGapY), maxGapY),
+        }
+      }),
+    }
+  }, [isMobile, logicalHeight])
 
   useEffect(() => {
     const base = BOY_SPRITES_BASE
@@ -51,12 +87,15 @@ export default function Game({ onReachEnd, attempts, username, onRetry, onBackTo
     reset,
     gameStateRef,
   } = useGameLoop({
-    level: LEVEL,
-    canvasWidth: CANVAS_WIDTH,
-    canvasHeight: CANVAS_HEIGHT,
+    level: tunedLevel,
+    canvasWidth: logicalWidth,
+    canvasHeight: logicalHeight,
     onReachEnd,
     onGameOver: () => setGameOver(true),
     flapRef,
+    kidWidth: isMobile ? 17 : 18,
+    kidHeight: isMobile ? 20 : 22,
+    kidScreenRatio: isMobile ? 0.42 : 0.5,
   })
 
   const handleFlap = () => {
@@ -98,30 +137,37 @@ export default function Game({ onReachEnd, attempts, username, onRetry, onBackTo
       const state = gameStateRef.current
       if (!state || !state.kid) return
 
-      const cw = canvas.clientWidth || CANVAS_WIDTH
-      const ch = canvas.clientHeight || CANVAS_HEIGHT
+      const cw = canvas.clientWidth || logicalWidth
+      const ch = canvas.clientHeight || logicalHeight
       if (cw > 0 && ch > 0 && (lastW !== cw || lastH !== ch)) {
         lastW = cw
         lastH = ch
         canvas.width = cw * dpr
         canvas.height = ch * dpr
       }
-      const w = lastW || CANVAS_WIDTH
-      const h = lastH || CANVAS_HEIGHT
+      const w = lastW || logicalWidth
+      const h = lastH || logicalHeight
+
+      const scaleX = (w * dpr) / logicalWidth
+      const scaleY = (h * dpr) / logicalHeight
+      // Use cover so gameplay fills the viewport while preserving aspect ratio.
+      const uniformScale = Math.max(scaleX, scaleY)
+      const offsetX = (w * dpr - logicalWidth * uniformScale) / 2
+      const offsetY = (h * dpr - logicalHeight * uniformScale) / 2
 
       ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.scale((w * dpr) / CANVAS_WIDTH, (h * dpr) / CANVAS_HEIGHT)
-      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+      ctx.clearRect(0, 0, w * dpr, h * dpr)
+      ctx.setTransform(uniformScale, 0, 0, uniformScale, offsetX, offsetY)
 
       // Ground
       ctx.fillStyle = '#5c4033'
-      ctx.fillRect(0, state.groundY, CANVAS_WIDTH * 2, CANVAS_HEIGHT - state.groundY)
+      ctx.fillRect(0, state.groundY, logicalWidth * 2, logicalHeight - state.groundY)
 
       // Gates: top and bottom obstacles (simple rects)
       if (state.gates) {
         state.gates.forEach((gate) => {
           const screenX = gate.x - state.scrollX
-          if (screenX < -gate.width || screenX > CANVAS_WIDTH + 20) return
+          if (screenX < -gate.width || screenX > logicalWidth + 20) return
           ctx.fillStyle = '#7cb342'
           ctx.fillRect(screenX, 0, gate.width, gate.gapY)
           ctx.fillStyle = '#558b2f'
@@ -162,11 +208,11 @@ export default function Game({ onReachEnd, attempts, username, onRetry, onBackTo
     })
     return () => cancelAnimationFrame(rafId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Empty deps - read from ref, don't recreate loop
+  }, [gameStateRef, isMobile, logicalWidth, logicalHeight]) // Recreate when viewport profile changes
 
   return (
     <div
-      className="game-container"
+      className={`game-container ${isMobile ? 'mobile' : ''}`}
       role="button"
       tabIndex={0}
       aria-label="Tap to fly"

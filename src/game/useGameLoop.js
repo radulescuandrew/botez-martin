@@ -3,8 +3,8 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 const GRAVITY = 0.36
 const FLAP_VELOCITY = -3.9
 const SIMULATION_SPEED = 1.7
-const KID_WIDTH = 20
-const KID_HEIGHT = 20
+const DEFAULT_KID_WIDTH = 18
+const DEFAULT_KID_HEIGHT = 22
 const GAP_MARGIN = 3
 const GROUND_MARGIN = 4
 
@@ -24,15 +24,18 @@ export function useGameLoop({
   onReachEnd,
   onGameOver,
   flapRef,
+  kidWidth = DEFAULT_KID_WIDTH,
+  kidHeight = DEFAULT_KID_HEIGHT,
+  kidScreenRatio = 0.5,
 }) {
   const groundY = level.groundY ?? canvasHeight - 24
-  const kidScreenX = Math.floor((canvasWidth - KID_WIDTH) / 2)
-  const startY = Math.floor((canvasHeight - KID_HEIGHT) / 2)
+  const kidScreenX = Math.floor(canvasWidth * kidScreenRatio - kidWidth / 2)
+  const startY = Math.floor((canvasHeight - kidHeight) / 2)
   const [kid, setKid] = useState({
     x: kidScreenX,
     y: startY,
-    width: KID_WIDTH,
-    height: KID_HEIGHT,
+    width: kidWidth,
+    height: kidHeight,
     velY: 0,
   })
   const [gates, setGates] = useState(() => [...(level.gates || [])])
@@ -55,14 +58,14 @@ export function useGameLoop({
     startedRef.current = false
     gameOverRef.current = false
     frameCountRef.current = 0
-    const centerY = Math.floor((canvasHeight - KID_HEIGHT) / 2)
+    const centerY = Math.floor((canvasHeight - kidHeight) / 2)
     kidRef.current = { y: centerY, velY: 0 }
     const resetGates = [...(level.gates || [])]
     const kidState = {
       x: kidScreenX,
       y: centerY,
-      width: KID_WIDTH,
-      height: KID_HEIGHT,
+      width: kidWidth,
+      height: kidHeight,
       velY: 0,
     }
     setKid(kidState)
@@ -71,7 +74,7 @@ export function useGameLoop({
     setScrollX(0)
     gameStateRef.current = { kid: kidState, gates: resetGates, scrollX: 0, groundY }
     setRestartCounter((c) => c + 1)
-  }, [level.gates, kidScreenX, canvasHeight, groundY])
+  }, [level.gates, kidScreenX, canvasHeight, groundY, kidWidth, kidHeight])
 
   useEffect(() => {
     kidScreenXRef.current = kidScreenX
@@ -116,8 +119,8 @@ export function useGameLoop({
         const kidState = {
           x: kidScreenXRef.current,
           y: k.y,
-          width: KID_WIDTH,
-          height: KID_HEIGHT,
+          width: kidWidth,
+          height: kidHeight,
           velY: k.velY,
         }
         setKid(kidState)
@@ -135,7 +138,7 @@ export function useGameLoop({
       k.velY += GRAVITY * step
       k.y += k.velY * step
 
-      if (k.y < 0 || k.y + KID_HEIGHT > groundY + GROUND_MARGIN) {
+      if (k.y < 0 || k.y + kidHeight > groundY + GROUND_MARGIN) {
         gameOverRef.current = true
         onGameOver()
         return
@@ -149,13 +152,13 @@ export function useGameLoop({
       const kidBox = {
         x: kx,
         y: k.y,
-        width: KID_WIDTH,
-        height: KID_HEIGHT,
+        width: kidWidth,
+        height: kidHeight,
       }
 
       for (const gate of gatesData) {
         const screenX = gate.x - newScroll
-        if (screenX + gate.width < kx - 10 || screenX > kx + KID_WIDTH + 10) continue
+        if (screenX + gate.width < kx - 10 || screenX > kx + kidWidth + 10) continue
         const topRect = {
           x: screenX,
           y: 0,
@@ -184,8 +187,8 @@ export function useGameLoop({
       const kidState = {
         x: kidScreenXRef.current,
         y: k.y,
-        width: KID_WIDTH,
-        height: KID_HEIGHT,
+        width: kidWidth,
+        height: kidHeight,
         velY: k.velY,
       }
       
@@ -204,7 +207,7 @@ export function useGameLoop({
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [level.gates, canvasWidth, groundY, scrollSpeed, endThreshold, onReachEnd, onGameOver, flapRef, restartCounter])
+  }, [level.gates, canvasWidth, groundY, scrollSpeed, endThreshold, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight])
 
   return {
     kid,
