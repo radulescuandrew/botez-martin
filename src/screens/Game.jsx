@@ -8,12 +8,45 @@ const BASE_CANVAS_WIDTH = 320
 const BASE_CANVAS_HEIGHT = 180
 
 const BOY_SPRITES_BASE = '/sprites/boy_sprites/Transparent%20PNG'
+const PLANET_SPRITES_BASE = '/sprites/planet_sprites'
+const EARTH_SPRITE = '/earth.png'
+const PLANET_FILES = [
+  'planet1.png',
+  'planet2.png',
+  'planet3.png',
+  'planet4.png',
+  'planet5.png',
+  'planet6.png',
+  'planet7.png',
+  'planet10.png',
+  'planet11.png',
+  'planet12.png',
+  'planet13.png',
+  'planet14.png',
+  'planet15.png',
+  'planet16.png',
+  'planet17.png',
+  'planet18_0.png',
+  'planet19.png',
+  'planet20.png',
+]
 
-export default function Game({ onReachEnd, attempts, username, onRetry, onBackToIntro }) {
+export default function Game({
+  onReachEnd,
+  attempts,
+  username,
+  onRetry,
+  onBackToIntro,
+  onRunStartAudio,
+  onRunFailAudio,
+}) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const flapRef = useRef(false)
   const boySpritesRef = useRef({ idle: [], jumpUp: null, jumpFall: null })
+  const planetSpritesRef = useRef([])
+  const earthSpriteRef = useRef(null)
+  const runAudioTriggeredRef = useRef(false)
   const [gameOver, setGameOver] = useState(false)
   const [isMobile, setIsMobile] = useState(() => (
     window.matchMedia('(max-width: 900px), (pointer: coarse)').matches
@@ -27,6 +60,40 @@ export default function Game({ onReachEnd, attempts, username, onRetry, onBackTo
     handleChange()
     media.addEventListener('change', handleChange)
     return () => media.removeEventListener('change', handleChange)
+  }, [])
+
+  useEffect(() => {
+    const img = new Image()
+    img.src = EARTH_SPRITE
+    img.onload = () => {
+      earthSpriteRef.current = img
+    }
+    return () => {
+      earthSpriteRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const loaded = []
+    let completed = 0
+
+    PLANET_FILES.forEach((file, index) => {
+      const img = new Image()
+      img.onload = () => {
+        loaded[index] = img
+        completed++
+        if (completed === PLANET_FILES.length && !cancelled) {
+          planetSpritesRef.current = loaded.filter(Boolean)
+        }
+      }
+      img.src = `${PLANET_SPRITES_BASE}/${file}`
+    })
+
+    return () => {
+      cancelled = true
+      planetSpritesRef.current = []
+    }
   }, [])
 
   const tunedLevel = useMemo(() => {
@@ -105,22 +172,44 @@ export default function Game({ onReachEnd, attempts, username, onRetry, onBackTo
   // Game over: show overlay (no auto-restart; user taps to try again)
   useEffect(() => {
     if (!gameOver) return
+    runAudioTriggeredRef.current = false
+    if (onRunFailAudio) onRunFailAudio()
     const overlay = overlayRef.current
     if (overlay) {
       gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.2 })
     }
-  }, [gameOver])
+  }, [gameOver, onRunFailAudio])
 
   const handlePointerDown = (e) => {
     e.preventDefault()
     if (gameOver) {
+      if (onRunStartAudio) onRunStartAudio()
+      runAudioTriggeredRef.current = false
       if (onRetry) onRetry()
       reset()
       setGameOver(false)
     } else {
+      if (scrollX <= 0 && onRunStartAudio && !runAudioTriggeredRef.current) {
+        runAudioTriggeredRef.current = true
+        onRunStartAudio()
+      }
       handleFlap()
     }
   }
+
+  useEffect(() => {
+    if (!onRunStartAudio) return
+    const handleKeyDown = (e) => {
+      if (e.key === ' ' || e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
+        if (!gameOver && scrollX <= 0 && !runAudioTriggeredRef.current) {
+          runAudioTriggeredRef.current = true
+          onRunStartAudio()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onRunStartAudio, gameOver, scrollX])
 
   // Draw loop - canvas fills viewport, game logic stays 320x180
   useEffect(() => {
@@ -159,19 +248,38 @@ export default function Game({ onReachEnd, attempts, username, onRetry, onBackTo
       ctx.clearRect(0, 0, w * dpr, h * dpr)
       ctx.setTransform(uniformScale, 0, 0, uniformScale, offsetX, offsetY)
 
-      // Ground
-      ctx.fillStyle = '#5c4033'
+      // Space floor at collision boundary.
+      ctx.fillStyle = '#12081f'
       ctx.fillRect(0, state.groundY, logicalWidth * 2, logicalHeight - state.groundY)
+      ctx.fillStyle = '#6a5acd'
+      ctx.fillRect(0, state.groundY - 1.5, logicalWidth * 2, 2.5)
 
-      // Gates: top and bottom obstacles (simple rects)
-      if (state.gates) {
-        state.gates.forEach((gate) => {
-          const screenX = gate.x - state.scrollX
-          if (screenX < -gate.width || screenX > logicalWidth + 20) return
-          ctx.fillStyle = '#7cb342'
-          ctx.fillRect(screenX, 0, gate.width, gate.gapY)
-          ctx.fillStyle = '#558b2f'
-          ctx.fillRect(screenX, gate.gapY + gate.gapHeight, gate.width, state.groundY - (gate.gapY + gate.gapHeight))
+      // Individual planet obstacles at varied sizes/positions.
+      if (state.planets) {
+        state.planets.forEach((planet) => {
+          const px = planet.x - state.scrollX
+          const size = planet.kind === 'earth' ? planet.radius * 2.8 : planet.radius * 2
+          if (px + planet.radius < -20 || px - planet.radius > logicalWidth + 20) return
+          const spritePool = planetSpritesRef.current
+          const img = planet.kind === 'earth'
+            ? earthSpriteRef.current
+            : (spritePool.length > 0 ? spritePool[planet.spriteIndex % spritePool.length] : null)
+          if (img && img.complete && img.naturalWidth > 0) {
+            const half = size / 2
+            ctx.drawImage(img, px - half, planet.y - half, size, size)
+            if (planet.kind === 'earth') {
+              ctx.strokeStyle = 'rgba(134, 215, 255, 0.65)'
+              ctx.lineWidth = 2
+              ctx.beginPath()
+              ctx.arc(px, planet.y, planet.radius * 1.22, 0, Math.PI * 2)
+              ctx.stroke()
+            }
+          } else {
+            ctx.fillStyle = '#8c66ff'
+            ctx.beginPath()
+            ctx.arc(px, planet.y, planet.radius, 0, Math.PI * 2)
+            ctx.fill()
+          }
         })
       }
 

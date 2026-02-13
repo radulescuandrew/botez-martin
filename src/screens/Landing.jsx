@@ -4,7 +4,7 @@ import BlackHoleTransition from '../components/BlackHoleTransition'
 
 const TRANSITION_MS = 12000
 
-export default function Landing({ onPlay, attempts, initialUsername = '' }) {
+export default function Landing({ onPlay, onPlayIntent, attempts, initialUsername = '' }) {
   const containerRef = useRef(null)
   const [username, setUsername] = useState(initialUsername)
   const [error, setError] = useState('')
@@ -17,6 +17,7 @@ export default function Landing({ onPlay, attempts, initialUsername = '' }) {
       return
     }
     setError('')
+    if (onPlayIntent) onPlayIntent()
     setIsTransitioning(true)
 
     const container = containerRef.current
@@ -40,8 +41,9 @@ export default function Landing({ onPlay, attempts, initialUsername = '' }) {
       <div ref={containerRef} className="screen landing-screen">
         <h1 className="landing-title">Bine ai venit!</h1>
         <p className="landing-subtitle">
-          Urmeaza sa intri intr-un mini-joc in care trebuie sa treci de obstacole
-          pentru a te inregistra si a afla detalii despre Botezul Martinilor.
+          Martin este pe cale sa se nasca si calatoreste prin spatiu ca sa-si gaseasca
+          drumul spre casa lui: Pamantul. Evita planetele, loveste Pamantul la final
+          si apoi inregistreaza-te pentru Botezul Martinilor.
         </p>
         <p className="landing-date">Incercari totale salvate: {attempts}</p>
 

@@ -3,12 +3,12 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
 const CRAWL_LINES = [
-  'Intr-o seara plina de lumina, familia Martin pregateste o zi speciala.',
-  'Un drum de bucurie si binecuvantare se deschide pentru cei dragi.',
-  'Inainte sa afli toate detaliile botezului, trebuie sa iti dovedesti curajul.',
-  'Treci prin stele, evita obstacolele si ajungi la destinatie.',
-  'La final vei putea confirma prezenta la sarbatoarea noastra.',
-  'Calatoria incepe acum...',
+  'Martin este pe cale sa se nasca.',
+  'Pana sa ajunga acasa, calatoreste prin univers printre planete.',
+  'Drumul lui are un singur final: Pamantul.',
+  'Evita obstacolele, ramai pe traiectorie si cauta planeta albastra.',
+  'Misiunea se incheie doar cand atingi Pamantul.',
+  'Calatoria lui Martin incepe acum...',
 ]
 
 function StarTunnel({ active }) {

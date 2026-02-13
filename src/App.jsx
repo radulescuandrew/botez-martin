@@ -30,6 +30,40 @@ export default function App() {
   const [username, setUsername] = useState(readUsername)
   const gameRef = useRef(null)
   const endRef = useRef(null)
+  const bgAudioRef = useRef(null)
+  const gameOverAudioRef = useRef(null)
+
+  const ensureBackgroundSongPlaying = () => {
+    if (!bgAudioRef.current) {
+      const audio = new Audio('/starwars.mp3')
+      audio.preload = 'auto'
+      bgAudioRef.current = audio
+    }
+    if (gameOverAudioRef.current) {
+      gameOverAudioRef.current.pause()
+      gameOverAudioRef.current.currentTime = 0
+    }
+    if (bgAudioRef.current.paused || bgAudioRef.current.ended) {
+      const playPromise = bgAudioRef.current.play()
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {})
+      }
+    }
+  }
+
+  const playGameOverSong = () => {
+    if (!gameOverAudioRef.current) {
+      const audio = new Audio('/game_over.mp3')
+      audio.preload = 'auto'
+      gameOverAudioRef.current = audio
+    }
+    gameOverAudioRef.current.pause()
+    gameOverAudioRef.current.currentTime = 0
+    const playPromise = gameOverAudioRef.current.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {})
+    }
+  }
 
   const goToGame = (nextUsername) => {
     const cleanName = nextUsername.trim()
@@ -54,6 +88,43 @@ export default function App() {
     localStorage.setItem(INTRO_SEEN_KEY, hasSeenIntro ? '1' : '0')
   }, [hasSeenIntro])
 
+  // Best-effort: if app opens directly in game (e.g. after refresh), try to start music.
+  useEffect(() => {
+    if (screen === 'game') {
+      ensureBackgroundSongPlaying()
+    }
+  }, [screen])
+
+  // Browser autoplay-safe fallback: after refresh, start on first user gesture in game.
+  useEffect(() => {
+    if (screen !== 'game') return
+    const startOnGesture = () => {
+      ensureBackgroundSongPlaying()
+      window.removeEventListener('pointerdown', startOnGesture)
+      window.removeEventListener('keydown', startOnGesture)
+      window.removeEventListener('touchstart', startOnGesture)
+    }
+    window.addEventListener('pointerdown', startOnGesture)
+    window.addEventListener('keydown', startOnGesture)
+    window.addEventListener('touchstart', startOnGesture)
+    return () => {
+      window.removeEventListener('pointerdown', startOnGesture)
+      window.removeEventListener('keydown', startOnGesture)
+      window.removeEventListener('touchstart', startOnGesture)
+    }
+  }, [screen])
+
+  useEffect(() => () => {
+    if (bgAudioRef.current) {
+      bgAudioRef.current.pause()
+      bgAudioRef.current = null
+    }
+    if (gameOverAudioRef.current) {
+      gameOverAudioRef.current.pause()
+      gameOverAudioRef.current = null
+    }
+  }, [])
+
   useEffect(() => {
     if (screen === 'game' && gameRef.current) {
       gsap.fromTo(gameRef.current, { opacity: 0 }, { opacity: 1, duration: 0.4 })
@@ -71,6 +142,7 @@ export default function App() {
       {screen === 'landing' && (
         <Landing
           onPlay={goToGame}
+          onPlayIntent={ensureBackgroundSongPlaying}
           attempts={attempts}
           initialUsername={username}
         />
@@ -83,6 +155,8 @@ export default function App() {
             username={username}
             onRetry={countRetry}
             onBackToIntro={goToLanding}
+            onRunStartAudio={ensureBackgroundSongPlaying}
+            onRunFailAudio={playGameOverSong}
           />
         </div>
       )}
