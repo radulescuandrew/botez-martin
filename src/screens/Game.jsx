@@ -1,11 +1,14 @@
-import { useRef, useEffect, useState, useMemo } from 'react'
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { gsap } from 'gsap'
 import ParallaxBackground from '../components/ParallaxBackground'
+import BlackHoleTransition from '../components/BlackHoleTransition'
 import { useGameLoop } from '../game/useGameLoop'
 import { LEVEL } from '../game/level'
 
 const BASE_CANVAS_WIDTH = 320
 const BASE_CANVAS_HEIGHT = 180
+const WIN_LANDED_MS = 3000
+const WIN_TRANSITION_MS = 2200
 
 const BOY_SPRITES_BASE = '/sprites/boy_sprites/Transparent%20PNG'
 const PLANET_SPRITES_BASE = '/sprites/planet_sprites'
@@ -39,6 +42,7 @@ export default function Game({
   onBackToIntro,
   onRunStartAudio,
   onRunFailAudio,
+  onEarthHit,
 }) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -48,11 +52,15 @@ export default function Game({
   const earthSpriteRef = useRef(null)
   const runAudioTriggeredRef = useRef(false)
   const [gameOver, setGameOver] = useState(false)
+  const [winPhase, setWinPhase] = useState('none') // none | landed | transition | video
   const [isMobile, setIsMobile] = useState(() => (
     window.matchMedia('(max-width: 900px), (pointer: coarse)').matches
   ))
+  const winPhaseRef = useRef('none')
+  const winTimerRef = useRef(null)
   const logicalWidth = isMobile ? 512 : BASE_CANVAS_WIDTH
   const logicalHeight = isMobile ? 288 : BASE_CANVAS_HEIGHT
+  const ignoreReachEndRef = useCallback(() => {}, [])
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 900px), (pointer: coarse)')
@@ -157,13 +165,44 @@ export default function Game({
     level: tunedLevel,
     canvasWidth: logicalWidth,
     canvasHeight: logicalHeight,
-    onReachEnd,
+    onReachEnd: ignoreReachEndRef,
     onGameOver: () => setGameOver(true),
     flapRef,
     kidWidth: isMobile ? 17 : 18,
     kidHeight: isMobile ? 20 : 22,
     kidScreenRatio: isMobile ? 0.42 : 0.5,
   })
+
+  const handleReachEarth = useCallback((payload) => {
+    if (!payload?.earth || winPhaseRef.current !== 'none') return
+    if (onEarthHit) onEarthHit()
+    winPhaseRef.current = 'landed'
+    setWinPhase('landed')
+
+    const state = gameStateRef.current
+    if (state?.kid) {
+      const earthScreenX = payload.earth.x - payload.scrollX
+      const kidX = earthScreenX - state.kid.width / 2
+      const kidY = payload.earth.y - payload.earth.radius - state.kid.height + 1
+      const landedKid = { ...state.kid, x: kidX, y: kidY, velY: 0 }
+      gameStateRef.current = { ...state, kid: landedKid, scrollX: payload.scrollX }
+    }
+
+    winTimerRef.current = window.setTimeout(() => {
+      winPhaseRef.current = 'transition'
+      setWinPhase('transition')
+      winTimerRef.current = window.setTimeout(() => {
+        winPhaseRef.current = 'video'
+        setWinPhase('video')
+      }, WIN_TRANSITION_MS)
+    }, WIN_LANDED_MS)
+  }, [gameStateRef, onEarthHit])
+
+  useEffect(() => {
+    return () => {
+      if (winTimerRef.current) window.clearTimeout(winTimerRef.current)
+    }
+  }, [])
 
   const handleFlap = () => {
     flapRef.current = true
@@ -182,6 +221,7 @@ export default function Game({
 
   const handlePointerDown = (e) => {
     e.preventDefault()
+    if (winPhaseRef.current !== 'none') return
     if (gameOver) {
       if (onRunStartAudio) onRunStartAudio()
       runAudioTriggeredRef.current = false
@@ -318,6 +358,15 @@ export default function Game({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameStateRef, isMobile, logicalWidth, logicalHeight]) // Recreate when viewport profile changes
 
+  useEffect(() => {
+    const earthPayload = gameStateRef.current?.earthHit
+    if (earthPayload) {
+      // Consume one-shot event from loop.
+      gameStateRef.current.earthHit = null
+      handleReachEarth(earthPayload)
+    }
+  })
+
   return (
     <div
       className={`game-container ${isMobile ? 'mobile' : ''}`}
@@ -353,6 +402,20 @@ export default function Game({
       {gameOver && (
         <div ref={overlayRef} className="game-over-overlay">
           <p>Game over! Tap to try again.</p>
+        </div>
+      )}
+      {winPhase === 'transition' && (
+        <BlackHoleTransition active durationMs={WIN_TRANSITION_MS} showStory={false} />
+      )}
+      {winPhase === 'video' && (
+        <div className="win-video-overlay">
+          <video
+            className="win-video"
+            src="/placenta.mp4"
+            autoPlay
+            playsInline
+            onEnded={onReachEnd}
+          />
         </div>
       )}
     </div>

@@ -65,6 +65,16 @@ export default function App() {
     }
   }
 
+  const stopBackgroundSong = () => {
+    if (bgAudioRef.current) {
+      bgAudioRef.current.pause()
+    }
+    if (gameOverAudioRef.current) {
+      gameOverAudioRef.current.pause()
+      gameOverAudioRef.current.currentTime = 0
+    }
+  }
+
   const goToGame = (nextUsername) => {
     const cleanName = nextUsername.trim()
     setUsername(cleanName)
@@ -157,6 +167,7 @@ export default function App() {
             onBackToIntro={goToLanding}
             onRunStartAudio={ensureBackgroundSongPlaying}
             onRunFailAudio={playGameOverSong}
+            onEarthHit={stopBackgroundSong}
           />
         </div>
       )}

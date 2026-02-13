@@ -68,7 +68,7 @@ function Scene({ active }) {
   )
 }
 
-export default function BlackHoleTransition({ active, durationMs = 5200 }) {
+export default function BlackHoleTransition({ active, durationMs = 5200, showStory = true }) {
   const [activeLines, setActiveLines] = useState([])
   const timersRef = useRef([])
   const travelDuration = Math.max(16000, Math.floor(durationMs * 1.4))
@@ -78,7 +78,7 @@ export default function BlackHoleTransition({ active, durationMs = 5200 }) {
     timersRef.current.forEach((id) => window.clearTimeout(id))
     timersRef.current = []
 
-    if (!active) {
+    if (!active || !showStory) {
       setActiveLines([])
       return
     }
@@ -100,7 +100,7 @@ export default function BlackHoleTransition({ active, durationMs = 5200 }) {
       timersRef.current.forEach((id) => window.clearTimeout(id))
       timersRef.current = []
     }
-  }, [active, spawnInterval, travelDuration])
+  }, [active, showStory, spawnInterval, travelDuration])
 
   return (
     <div
@@ -111,13 +111,15 @@ export default function BlackHoleTransition({ active, durationMs = 5200 }) {
       <Canvas camera={{ position: [0, 0, 7], fov: 58 }} dpr={[1, 2]} gl={{ antialias: true }}>
         <Scene active={active} />
       </Canvas>
-      <div className="story-sequence">
-        {activeLines.map((entry) => (
-          <p key={entry.id} className="story-line">
-            {entry.line}
-          </p>
-        ))}
-      </div>
+      {showStory && (
+        <div className="story-sequence">
+          {activeLines.map((entry) => (
+            <p key={entry.id} className="story-line">
+              {entry.line}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

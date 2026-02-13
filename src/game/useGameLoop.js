@@ -6,6 +6,7 @@ const SIMULATION_SPEED = 1.7
 const DEFAULT_KID_WIDTH = 18
 const DEFAULT_KID_HEIGHT = 22
 const GROUND_MARGIN = 4
+const DEV_FAST_FINISH_STORAGE_KEY = 'dev_fast_finish'
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
@@ -24,10 +25,18 @@ function checkCircleAABB(circle, rect) {
   return dx * dx + dy * dy < circle.radius * circle.radius
 }
 
-function buildPlanets(gates, groundY, levelLength, canvasWidth) {
-  const planets = []
+function isDevFastFinishEnabled() {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return false
+  const fromQuery = new URLSearchParams(window.location.search).get('dev_fast_finish')
+  const fromStorage = window.localStorage.getItem(DEV_FAST_FINISH_STORAGE_KEY)
+  return fromQuery === '1' || fromStorage === '1'
+}
 
-  gates.forEach((gate, idx) => {
+function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = false) {
+  const planets = []
+  const sourceGates = devFastFinish ? gates.slice(0, 3) : gates
+
+  sourceGates.forEach((gate, idx) => {
     const gapTop = gate.gapY
     const gapBottom = gate.gapY + gate.gapHeight
     const gapCenter = (gapTop + gapBottom) / 2
@@ -81,8 +90,12 @@ function buildPlanets(gates, groundY, levelLength, canvasWidth) {
     }
   })
 
-  const earthRadius = Math.max(22, Math.floor(canvasWidth * 0.065))
-  const earthX = levelLength - Math.max(140, Math.floor(canvasWidth * 0.42))
+  const earthRadius = devFastFinish
+    ? Math.max(30, Math.floor(canvasWidth * 0.09))
+    : Math.max(22, Math.floor(canvasWidth * 0.065))
+  const earthX = devFastFinish
+    ? canvasWidth + Math.max(110, Math.floor(canvasWidth * 0.22))
+    : levelLength - Math.max(140, Math.floor(canvasWidth * 0.42))
   const earthY = clamp(Math.floor(groundY * 0.5), earthRadius + 12, groundY - earthRadius - 8)
   planets.push({
     x: earthX,
@@ -106,6 +119,7 @@ export function useGameLoop({
   kidHeight = DEFAULT_KID_HEIGHT,
   kidScreenRatio = 0.5,
 }) {
+  const devFastFinish = isDevFastFinishEnabled()
   const groundY = level.groundY ?? canvasHeight - 24
   const kidScreenX = Math.floor(canvasWidth * kidScreenRatio - kidWidth / 2)
   const startY = Math.floor((canvasHeight - kidHeight) / 2)
@@ -117,7 +131,7 @@ export function useGameLoop({
     velY: 0,
   })
   const [planets, setPlanets] = useState(() =>
-    buildPlanets(level.gates || [], groundY, level.length, canvasWidth)
+    buildPlanets(level.gates || [], groundY, level.length, canvasWidth, devFastFinish)
   )
   const [scrollX, setScrollX] = useState(0)
   const [restartCounter, setRestartCounter] = useState(0)
@@ -130,7 +144,7 @@ export function useGameLoop({
   const startedRef = useRef(false)
   const gameOverRef = useRef(false)
   const frameCountRef = useRef(0)
-  const gameStateRef = useRef({ kid, planets, scrollX, groundY })
+  const gameStateRef = useRef({ kid, planets, scrollX, groundY, earthHit: null })
   const scrollSpeed = level.scrollSpeed ?? 3
 
   const reset = useCallback(() => {
@@ -139,7 +153,7 @@ export function useGameLoop({
     frameCountRef.current = 0
     const centerY = Math.floor((canvasHeight - kidHeight) / 2)
     kidRef.current = { y: centerY, velY: 0 }
-    const resetPlanets = buildPlanets(level.gates || [], groundY, level.length, canvasWidth)
+    const resetPlanets = buildPlanets(level.gates || [], groundY, level.length, canvasWidth, devFastFinish)
     const kidState = {
       x: kidScreenX,
       y: centerY,
@@ -151,9 +165,9 @@ export function useGameLoop({
     setPlanets(resetPlanets)
     scrollRef.current = 0
     setScrollX(0)
-    gameStateRef.current = { kid: kidState, planets: resetPlanets, scrollX: 0, groundY }
+    gameStateRef.current = { kid: kidState, planets: resetPlanets, scrollX: 0, groundY, earthHit: null }
     setRestartCounter((c) => c + 1)
-  }, [level.gates, level.length, kidScreenX, canvasHeight, canvasWidth, groundY, kidWidth, kidHeight])
+  }, [level.gates, level.length, kidScreenX, canvasHeight, canvasWidth, groundY, kidWidth, kidHeight, devFastFinish])
 
   useEffect(() => {
     kidScreenXRef.current = kidScreenX
@@ -172,7 +186,7 @@ export function useGameLoop({
 
   useEffect(() => {
     let rafId
-    const planetsData = buildPlanets(level.gates || [], groundY, level.length, canvasWidth)
+    const planetsData = buildPlanets(level.gates || [], groundY, level.length, canvasWidth, devFastFinish)
     const earth = planetsData.find((p) => p.kind === 'earth')
 
     let lastFrameTime = null
@@ -206,7 +220,7 @@ export function useGameLoop({
         setKid(kidState)
         setPlanets(planetsData)
         setScrollX(scr)
-        gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: scr, groundY }
+        gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: scr, groundY, earthHit: null }
         rafId = requestAnimationFrame(tick)
         return
       }
@@ -246,7 +260,32 @@ export function useGameLoop({
         }
         if (checkCircleAABB(circle, kidBox)) {
           if (planet.kind === 'earth') {
-            onReachEnd()
+            const kidState = {
+              x: kidScreenXRef.current,
+              y: k.y,
+              width: kidWidth,
+              height: kidHeight,
+              velY: 0,
+            }
+            gameStateRef.current = {
+              kid: kidState,
+              planets: planetsData,
+              scrollX: newScroll,
+              groundY,
+              earthHit: {
+                earth: planet,
+                scrollX: newScroll,
+              },
+            }
+            setKid(kidState)
+            setPlanets(planetsData)
+            setScrollX(newScroll)
+            if (typeof onReachEnd === 'function') {
+              onReachEnd({
+                earth: planet,
+                scrollX: newScroll,
+              })
+            }
           } else {
             gameOverRef.current = true
             onGameOver()
@@ -286,7 +325,7 @@ export function useGameLoop({
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [level.gates, level.length, canvasWidth, groundY, scrollSpeed, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight])
+  }, [level.gates, level.length, canvasWidth, groundY, scrollSpeed, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, devFastFinish])
 
   return {
     kid,

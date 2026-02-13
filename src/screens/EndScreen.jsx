@@ -22,17 +22,29 @@ export default function EndScreen() {
 
   return (
     <div ref={containerRef} className="screen end-screen">
-      <h1 className="end-title">You made it!</h1>
-      <p className="end-subtitle">Hope you had fun. Will you join us at the party?</p>
-      {!submitted ? (
-        <RSVPForm onSubmit={handleSubmit} />
-      ) : (
-        <p ref={thankYouRef} className="thank-you-message">
-          {rsvpData?.attending
-            ? "Thank you! We'll see you there."
-            : "Thanks for letting us know. You'll be missed!"}
-        </p>
-      )}
+      <div className="end-video-wrap">
+        <video
+          className="end-video"
+          src="/martin.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
+      </div>
+      <div className="end-content">
+        <h1 className="end-title">You made it!</h1>
+        <p className="end-subtitle">Hope you had fun. Will you join us at the party?</p>
+        {!submitted ? (
+          <RSVPForm onSubmit={handleSubmit} />
+        ) : (
+          <p ref={thankYouRef} className="thank-you-message">
+            {rsvpData?.attending
+              ? "Thank you! We'll see you there."
+              : "Thanks for letting us know. You'll be missed!"}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
