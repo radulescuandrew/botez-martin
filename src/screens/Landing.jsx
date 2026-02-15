@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { gsap } from 'gsap'
 import BlackHoleTransition from '../components/BlackHoleTransition'
-import ParallaxBackground from '../components/ParallaxBackground'
+import TimboBackground from '../components/TimboBackground'
 
 const TRANSITION_MS = 12000
 const KID_SPRITES = [
@@ -50,7 +50,7 @@ export default function Landing({ onPlay, onPlayIntent, attempts, initialUsernam
   return (
     <>
       <div ref={containerRef} className="screen landing-screen">
-        <ParallaxBackground scrollOffset={0} />
+        <TimboBackground scrollOffset={0} />
         <div className="landing-content">
           <div className="landing-party-image-wrap">
             <img

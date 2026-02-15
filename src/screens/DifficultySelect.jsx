@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import ParallaxBackground from '../components/ParallaxBackground'
+import TimboBackground from '../components/TimboBackground'
 
 const KID_SPRITES = [
   '/sprites/boy_sprites_2/Jump%20(2).png',
@@ -19,7 +19,7 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
 
   return (
     <div className="screen difficulty-screen">
-      <ParallaxBackground scrollOffset={0} />
+      <TimboBackground scrollOffset={0} />
       <section className="difficulty-section difficulty-section-kid" aria-hidden>
         <div className="difficulty-kid">
           <img

@@ -1,27 +1,31 @@
-// Flappy-style gates: top and bottom obstacles with a gap. Kid flies through the gap.
-// gapY = y of top of gap, gapHeight = height of gap. Top obstacle 0..gapY, bottom (gapY+gapHeight)..ground.
-const GROUND_Y = 156 // top of ground strip (canvas 180, ground 24px)
+// Obstacles: gates (top+bottom gap) or single big obstacles (top / bottom / center). Kid flies through gaps or over/under.
+// Gate: gapY = top of gap, gapHeight = height. Top obstacle above gap, bottom below.
+// Top: big obstacle at top — fly under. Bottom: big at bottom — fly over. Center: big in middle — fly over or under.
+const GROUND_Y = 156
 
 export const LEVEL = {
   length: 3200,
   scrollSpeed: 2.9,
   groundY: GROUND_Y,
-  // Uneven gaps: sometimes high (low gapY), sometimes low (high gapY)
-  gates: [
+  obstacles: [
     { x: 350, gapY: 50, gapHeight: 48, width: 44 },
-    { x: 520, gapY: 75, gapHeight: 44, width: 40 },
+    { type: 'top', x: 520, width: 72 },
     { x: 680, gapY: 30, gapHeight: 52, width: 46 },
-    { x: 840, gapY: 90, gapHeight: 40, width: 42 },
+    { type: 'bottom', x: 840, width: 68 },
     { x: 1000, gapY: 45, gapHeight: 50, width: 44 },
-    { x: 1160, gapY: 70, gapHeight: 46, width: 40 },
+    { type: 'center', x: 1160, width: 64 },
     { x: 1320, gapY: 25, gapHeight: 54, width: 48 },
-    { x: 1480, gapY: 85, gapHeight: 44, width: 42 },
+    { type: 'top', x: 1480, width: 70 },
     { x: 1640, gapY: 55, gapHeight: 48, width: 44 },
-    { x: 1800, gapY: 65, gapHeight: 46, width: 40 },
+    { type: 'bottom', x: 1800, width: 66 },
     { x: 1960, gapY: 35, gapHeight: 52, width: 46 },
-    { x: 2120, gapY: 80, gapHeight: 42, width: 42 },
+    { type: 'center', x: 2120, width: 62 },
     { x: 2280, gapY: 48, gapHeight: 50, width: 44 },
-    { x: 2440, gapY: 72, gapHeight: 44, width: 40 },
+    { type: 'top', x: 2440, width: 68 },
     { x: 2600, gapY: 40, gapHeight: 52, width: 46 },
   ],
+  // Gate-type obstacles only (for difficulty tuning that expects .gates with gapY/gapHeight)
+  get gates() {
+    return this.obstacles.filter((o) => o.gapY != null && o.gapHeight != null)
+  },
 }

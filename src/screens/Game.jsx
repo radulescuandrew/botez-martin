@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { gsap } from 'gsap'
-import ParallaxBackground from '../components/ParallaxBackground'
+import TimboBackground from '../components/TimboBackground'
 import BlackHoleTransition from '../components/BlackHoleTransition'
 import { useGameLoop } from '../game/useGameLoop'
 import { LEVEL } from '../game/level'
@@ -25,28 +25,19 @@ function getDifficultyMultiplier(diff) {
 }
 
 const BOY_SPRITES_BASE = '/sprites/boy_sprites_2'
-const PLANET_SPRITES_BASE = '/sprites/planet_sprites'
-const EARTH_SPRITE = '/earth.png'
-const PLANET_FILES = [
-  'planet1.png',
-  'planet2.png',
-  'planet3.png',
-  'planet4.png',
-  'planet5.png',
-  'planet6.png',
-  'planet7.png',
-  'planet10.png',
-  'planet11.png',
-  'planet12.png',
-  'planet13.png',
-  'planet14.png',
-  'planet15.png',
-  'planet16.png',
-  'planet17.png',
-  'planet18_0.png',
-  'planet19.png',
-  'planet20.png',
+const TIMBO_BASE = '/sprites/timbo_game'
+const TOY_FILES = [
+  'Toys/Watering-Can_Blue (1920x1080-93x61).png',
+  'Toys/Car_1 (1920x1080-93x72).png',
+  'Toys/Shovel_Blue (1920x1080-42x89).png',
+  'Toys/Ball_Colorful (1920x1080-103x88).png',
+  'Toys/Jumpball_Green (1920x1080-90x95).png',
 ]
+const GOAL_SPRITE = "Goal - Napoleon's Home/Goal (Home)_byDay (1920x1080-966x531).png"
+
+function timboAssetUrl(path) {
+  return TIMBO_BASE + '/' + path.split('/').map((s) => encodeURIComponent(s)).join('/')
+}
 
 export default function Game({
   onReachEnd,
@@ -64,8 +55,8 @@ export default function Game({
   const overlayRef = useRef(null)
   const flapRef = useRef(false)
   const boySpritesRef = useRef({ idle: [], jumpUp: null, jumpFall: null })
-  const planetSpritesRef = useRef([])
-  const earthSpriteRef = useRef(null)
+  const toySpritesRef = useRef([])
+  const goalSpriteRef = useRef(null)
   const runAudioTriggeredRef = useRef(false)
   const [gameOver, setGameOver] = useState(false)
   const [winPhase, setWinPhase] = useState('none') // none | landed | transition | video
@@ -99,12 +90,12 @@ export default function Game({
 
   useEffect(() => {
     const img = new Image()
-    img.src = EARTH_SPRITE
+    img.src = timboAssetUrl(GOAL_SPRITE)
     img.onload = () => {
-      earthSpriteRef.current = img
+      goalSpriteRef.current = img
     }
     return () => {
-      earthSpriteRef.current = null
+      goalSpriteRef.current = null
     }
   }, [])
 
@@ -113,21 +104,21 @@ export default function Game({
     const loaded = []
     let completed = 0
 
-    PLANET_FILES.forEach((file, index) => {
+    TOY_FILES.forEach((file, index) => {
       const img = new Image()
       img.onload = () => {
         loaded[index] = img
         completed++
-        if (completed === PLANET_FILES.length && !cancelled) {
-          planetSpritesRef.current = loaded.filter(Boolean)
+        if (completed === TOY_FILES.length && !cancelled) {
+          toySpritesRef.current = loaded.filter(Boolean)
         }
       }
-      img.src = `${PLANET_SPRITES_BASE}/${file}`
+      img.src = timboAssetUrl(file)
     })
 
     return () => {
       cancelled = true
-      planetSpritesRef.current = []
+      toySpritesRef.current = []
     }
   }, [])
 
@@ -149,6 +140,7 @@ export default function Game({
         planetProfile: { sideMode: 'none', radiusScale: 0.9 },
       }
     } else if (difficulty === 'nightmare') {
+      const nightmareLength = 6800
       const midGates = []
       for (let i = 0; i < LEVEL.gates.length - 1; i += 1) {
         const a = LEVEL.gates[i]
@@ -164,15 +156,20 @@ export default function Game({
       const base = [...LEVEL.gates, ...midGates].sort((g1, g2) => g1.x - g2.x)
       const lastBaseX = base[base.length - 1].x
       const tailSpacing = 180
-      const tail = base.slice(Math.floor(base.length * 0.35)).map((gate, idx) => ({
-        ...gate,
-        x: lastBaseX + tailSpacing + idx * tailSpacing,
-        gapHeight: Math.max(54, gate.gapHeight + 2),
-        width: Math.min(62, Math.max(50, gate.width + 6)),
-      }))
+      const gateTemplates = base.slice(Math.floor(base.length * 0.35))
+      const tailCount = Math.ceil((nightmareLength - lastBaseX - 250) / tailSpacing)
+      const tail = Array.from({ length: tailCount }, (_, idx) => {
+        const gate = gateTemplates[idx % gateTemplates.length]
+        return {
+          ...gate,
+          x: lastBaseX + tailSpacing + idx * tailSpacing,
+          gapHeight: Math.max(54, gate.gapHeight + 2),
+          width: Math.min(62, Math.max(50, gate.width + 6)),
+        }
+      })
       difficultyLevel = {
         ...LEVEL,
-        length: 6800,
+        length: nightmareLength,
         scrollSpeed: LEVEL.scrollSpeed * 1.06,
         gates: [...base, ...tail],
         planetProfile: { sideMode: 'normal', radiusScale: 1.02 },
@@ -445,26 +442,32 @@ export default function Game({
       ctx.fillStyle = '#6a5acd'
       ctx.fillRect(0, state.groundY - 1.5, logicalWidth * 2, 2.5)
 
-      // Individual planet obstacles at varied sizes/positions.
+      // Toys as gates + goal (timbo theme)
       if (state.planets) {
+        const toyPool = toySpritesRef.current
+        const goalImg = goalSpriteRef.current
         state.planets.forEach((planet) => {
           const px = planet.x - state.scrollX
           const size = planet.kind === 'earth' ? planet.radius * 2.8 : planet.radius * 2
           if (px + planet.radius < -20 || px - planet.radius > logicalWidth + 20) return
-          const spritePool = planetSpritesRef.current
-          const img = planet.kind === 'earth'
-            ? earthSpriteRef.current
-            : (spritePool.length > 0 ? spritePool[planet.spriteIndex % spritePool.length] : null)
+
+          if (planet.kind === 'earth') {
+            const half = size / 2
+            if (goalImg && goalImg.complete && goalImg.naturalWidth > 0) {
+              ctx.drawImage(goalImg, px - half, planet.y - half, size, size)
+            } else {
+              ctx.fillStyle = '#4a9c6d'
+              ctx.beginPath()
+              ctx.arc(px, planet.y, planet.radius, 0, Math.PI * 2)
+              ctx.fill()
+            }
+            return
+          }
+
+          const img = toyPool.length > 0 ? toyPool[planet.spriteIndex % toyPool.length] : null
           if (img && img.complete && img.naturalWidth > 0) {
             const half = size / 2
-            ctx.drawImage(img, px - half, planet.y - half, size, size)
-            if (planet.kind === 'earth') {
-              ctx.strokeStyle = 'rgba(134, 215, 255, 0.65)'
-              ctx.lineWidth = 2
-              ctx.beginPath()
-              ctx.arc(px, planet.y, planet.radius * 1.22, 0, Math.PI * 2)
-              ctx.stroke()
-            }
+            ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, px - half, planet.y - half, size, size)
           } else {
             ctx.fillStyle = '#8c66ff'
             ctx.beginPath()
@@ -556,7 +559,7 @@ export default function Game({
       <p className={`game-controls-hint ${scrollX > 0 ? 'hidden' : ''}`}>
         Tap or press space to start and fly
       </p>
-      <ParallaxBackground scrollOffset={scrollX} />
+      <TimboBackground scrollOffset={scrollX} />
       <canvas
         ref={canvasRef}
         className="game-canvas"
