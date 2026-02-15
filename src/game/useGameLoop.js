@@ -3,7 +3,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 const GRAVITY = 0.36
 const FLAP_VELOCITY = -3.9
 const SIMULATION_SPEED = 1.7
-const DEFAULT_KID_WIDTH = 18
+const DEFAULT_KID_WIDTH = 22
 const DEFAULT_KID_HEIGHT = 22
 const GROUND_MARGIN = 4
 const DEV_FAST_FINISH_STORAGE_KEY = 'dev_fast_finish'
@@ -109,9 +109,10 @@ function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = 
     }
   })
 
-  const earthRadius = devFastFinish
+  let earthRadius = devFastFinish
     ? Math.max(30, Math.floor(canvasWidth * 0.09))
     : Math.max(22, Math.floor(canvasWidth * 0.065))
+  earthRadius = Math.round(earthRadius * radiusScale)
   const earthX = devFastFinish
     ? canvasWidth + Math.max(110, Math.floor(canvasWidth * 0.22))
     : levelLength - Math.max(140, Math.floor(canvasWidth * 0.42))
@@ -127,6 +128,8 @@ function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = 
   return planets
 }
 
+const DEFAULT_COLLISION_INSETS = { top: 0, bottom: 0, left: 0, right: 0 }
+
 export function useGameLoop({
   level,
   canvasWidth,
@@ -137,7 +140,9 @@ export function useGameLoop({
   kidWidth = DEFAULT_KID_WIDTH,
   kidHeight = DEFAULT_KID_HEIGHT,
   kidScreenRatio = 0.5,
+  kidCollisionInsets = DEFAULT_COLLISION_INSETS,
 }) {
+  const { top: inT, bottom: inB, left: inL, right: inR } = kidCollisionInsets
   const devFastFinish = isDevFastFinishEnabled()
   const groundY = level.groundY ?? canvasHeight - 24
   const kidScreenX = Math.floor(canvasWidth * kidScreenRatio - kidWidth / 2)
@@ -265,7 +270,9 @@ export function useGameLoop({
       k.velY += GRAVITY * step
       k.y += k.velY * step
 
-      if (k.y < 0 || k.y + kidHeight > groundY + GROUND_MARGIN) {
+      const ceilingMargin = 6
+      const groundMargin = GROUND_MARGIN + 8
+      if (k.y < -ceilingMargin || k.y + kidHeight > groundY + groundMargin) {
         gameOverRef.current = true
         onGameOver()
         return
@@ -277,10 +284,10 @@ export function useGameLoop({
 
       const kx = kidScreenXRef.current
       const kidBox = {
-        x: kx,
-        y: k.y,
-        width: kidWidth,
-        height: kidHeight,
+        x: kx + inL,
+        y: k.y + inT,
+        width: kidWidth - inL - inR,
+        height: kidHeight - inT - inB,
       }
 
       for (const planet of planetsData) {
@@ -289,7 +296,7 @@ export function useGameLoop({
         const circle = {
           x: screenX,
           y: planet.y,
-          radius: planet.kind === 'earth' ? planet.radius * 1.15 : planet.radius * 0.9,
+          radius: planet.kind === 'earth' ? planet.radius * 1.1 : planet.radius * 0.72,
         }
         if (checkCircleAABB(circle, kidBox)) {
           if (planet.kind === 'earth') {
@@ -358,7 +365,7 @@ export function useGameLoop({
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [level.gates, level.length, level.planetProfile, canvasWidth, groundY, scrollSpeed, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, devFastFinish])
+  }, [level.gates, level.length, level.planetProfile, canvasWidth, groundY, scrollSpeed, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish])
 
   return {
     kid,

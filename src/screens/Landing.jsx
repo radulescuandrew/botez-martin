@@ -5,8 +5,8 @@ import ParallaxBackground from '../components/ParallaxBackground'
 
 const TRANSITION_MS = 12000
 const KID_SPRITES = [
-  '/sprites/boy_sprites/Transparent%20PNG/jump/jump_up.png',
-  '/sprites/boy_sprites/Transparent%20PNG/jump/jump_fall.png',
+  '/sprites/boy_sprites_2/Jump%20(2).png',
+  '/sprites/boy_sprites_2/Jump%20(3).png',
 ]
 
 export default function Landing({ onPlay, onPlayIntent, attempts, initialUsername = '' }) {
@@ -52,6 +52,14 @@ export default function Landing({ onPlay, onPlayIntent, attempts, initialUsernam
       <div ref={containerRef} className="screen landing-screen">
         <ParallaxBackground scrollOffset={0} />
         <div className="landing-content">
+          <div className="landing-party-image-wrap">
+            <img
+              src="/Martin_Party.png"
+              alt=""
+              className="landing-party-image"
+              style={{ width: '250px', height: '250px' }}
+            />
+          </div>
           <h1 className="landing-title">Bine ai venit!</h1>
           <div className="landing-text">
             <p>

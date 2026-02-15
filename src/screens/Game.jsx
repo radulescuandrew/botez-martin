@@ -24,7 +24,7 @@ function getDifficultyMultiplier(diff) {
   return diff === 'easy' ? 1 : diff === 'nightmare' ? 3 : 2
 }
 
-const BOY_SPRITES_BASE = '/sprites/boy_sprites/Transparent%20PNG'
+const BOY_SPRITES_BASE = '/sprites/boy_sprites_2'
 const PLANET_SPRITES_BASE = '/sprites/planet_sprites'
 const EARTH_SPRITE = '/earth.png'
 const PLANET_FILES = [
@@ -84,8 +84,8 @@ export default function Game({
   const winTimerRef = useRef(null)
   const retryLockTimerRef = useRef(null)
   const winVideoRef = useRef(null)
-  const logicalWidth = isMobile ? 512 : BASE_CANVAS_WIDTH
-  const logicalHeight = isMobile ? 288 : BASE_CANVAS_HEIGHT
+  const logicalWidth = isMobile ? 400 : BASE_CANVAS_WIDTH
+  const logicalHeight = isMobile ? 225 : BASE_CANVAS_HEIGHT
   const ignoreReachEndRef = useCallback(() => {}, [])
   const difficultyMultiplier = getDifficultyMultiplier(difficulty)
 
@@ -153,26 +153,29 @@ export default function Game({
       for (let i = 0; i < LEVEL.gates.length - 1; i += 1) {
         const a = LEVEL.gates[i]
         const b = LEVEL.gates[i + 1]
+        const midGapH = Math.round((a.gapHeight + b.gapHeight) / 2)
         midGates.push({
           x: Math.round((a.x + b.x) / 2),
-          gapY: Math.max(20, Math.round((a.gapY + b.gapY) / 2) + (i % 3 === 0 ? -10 : 8)),
-          gapHeight: Math.max(30, Math.round((a.gapHeight + b.gapHeight) / 2) - 9),
-          width: Math.min(56, Math.round((a.width + b.width) / 2) + 6),
+          gapY: Math.max(24, Math.round((a.gapY + b.gapY) / 2) + (i % 3 === 0 ? -5 : 4)),
+          gapHeight: Math.max(54, midGapH + 2),
+          width: Math.min(62, Math.max(50, Math.round((a.width + b.width) / 2) + 8)),
         })
       }
       const base = [...LEVEL.gates, ...midGates].sort((g1, g2) => g1.x - g2.x)
+      const lastBaseX = base[base.length - 1].x
+      const tailSpacing = 180
       const tail = base.slice(Math.floor(base.length * 0.35)).map((gate, idx) => ({
         ...gate,
-        x: gate.x + 2700 + idx * 8,
-        gapHeight: Math.max(28, gate.gapHeight - 4),
-        width: Math.min(60, gate.width + 2),
+        x: lastBaseX + tailSpacing + idx * tailSpacing,
+        gapHeight: Math.max(54, gate.gapHeight + 2),
+        width: Math.min(62, Math.max(50, gate.width + 6)),
       }))
       difficultyLevel = {
         ...LEVEL,
         length: 6800,
         scrollSpeed: LEVEL.scrollSpeed * 1.06,
         gates: [...base, ...tail],
-        planetProfile: { sideMode: 'dense', radiusScale: 1.12 },
+        planetProfile: { sideMode: 'normal', radiusScale: 1.02 },
       }
     } else {
       difficultyLevel = {
@@ -184,18 +187,27 @@ export default function Game({
     if (!isMobile) return difficultyLevel
     const yScale = logicalHeight / BASE_CANVAS_HEIGHT
     const mobileGroundY = logicalHeight - 14
+    const baseRadiusScale = difficultyLevel.planetProfile?.radiusScale ?? 1
     return {
       ...difficultyLevel,
       groundY: mobileGroundY,
       scrollSpeed: difficultyLevel.scrollSpeed * 0.82,
+      planetProfile: {
+        ...difficultyLevel.planetProfile,
+        radiusScale: baseRadiusScale * 1.2,
+      },
       gates: difficultyLevel.gates.map((gate) => {
         const scaledGapHeight = Math.round(gate.gapHeight * yScale)
         const scaledGapY = Math.round(gate.gapY * yScale)
-        const nextGapHeight = Math.min(scaledGapHeight + 12, Math.round(logicalHeight * 0.38))
-        const maxGapY = Math.max(16, mobileGroundY - nextGapHeight - 12)
+        const minGapHeight = Math.max(48, Math.round(logicalHeight * 0.24))
+        const nextGapHeight = Math.min(
+          Math.max(scaledGapHeight + 10, minGapHeight),
+          Math.round(logicalHeight * 0.42)
+        )
+        const maxGapY = Math.max(16, mobileGroundY - nextGapHeight - 8)
         return {
           ...gate,
-          width: Math.max(30, Math.round(gate.width * 0.85)),
+          width: Math.max(44, Math.round(gate.width * 1.02)),
           gapHeight: nextGapHeight,
           gapY: Math.min(Math.max(12, scaledGapY), maxGapY),
         }
@@ -214,24 +226,28 @@ export default function Game({
 
     const img1 = new Image()
     img1.onload = () => { out.idle[0] = img1; checkAll() }
-    img1.src = `${base}/idle/frame-1.png`
+    img1.src = `${base}/Idle%20(1).png`
 
     const img2 = new Image()
     img2.onload = () => { out.idle[1] = img2; checkAll() }
-    img2.src = `${base}/idle/frame-2.png`
+    img2.src = `${base}/Idle%20(2).png`
 
     const imgUp = new Image()
     imgUp.onload = () => { out.jumpUp = imgUp; checkAll() }
-    imgUp.src = `${base}/jump/jump_up.png`
+    imgUp.src = `${base}/Jump%20(2).png`
 
     const imgFall = new Image()
     imgFall.onload = () => { out.jumpFall = imgFall; checkAll() }
-    imgFall.src = `${base}/jump/jump_fall.png`
+    imgFall.src = `${base}/Jump%20(8).png`
 
     return () => {
       boySpritesRef.current = { idle: [], jumpUp: null, jumpFall: null }
     }
   }, [])
+
+  const kidCollisionInsets = isMobile
+    ? { top: 8, bottom: 9, left: 4, right: 12 }
+    : { top: 5, bottom: 5, left: 3, right: 9 }
 
   const {
     scrollX,
@@ -244,9 +260,10 @@ export default function Game({
     onReachEnd: ignoreReachEndRef,
     onGameOver: () => setGameOver(true),
     flapRef,
-    kidWidth: isMobile ? 17 : 18,
-    kidHeight: isMobile ? 20 : 22,
-    kidScreenRatio: isMobile ? 0.42 : 0.5,
+    kidWidth: isMobile ? 28 : 18,
+    kidHeight: isMobile ? 34 : 22,
+    kidScreenRatio: isMobile ? 0.18 : 0.5,
+    kidCollisionInsets,
   })
   const baseScore = scrollToScoreBase(scrollX) + (winPhase !== 'none' ? WIN_BONUS : 0)
   const score = baseScore * difficultyMultiplier
@@ -457,7 +474,7 @@ export default function Game({
         })
       }
 
-      // Kid (boy_sprites: idle / jump_up / jump_fall)
+      // Kid (boy_sprites_2: Idle / Jump)
       const sprites = boySpritesRef.current
       const velY = state.kid.velY ?? 0
       let img = null
@@ -481,6 +498,16 @@ export default function Game({
         ctx.fillStyle = '#3498db'
         ctx.fillRect(state.kid.x, state.kid.y, state.kid.width, state.kid.height)
       }
+      // Debug: border around kid collision box (inset to match actual hitbox)
+      const ins = kidCollisionInsets
+      ctx.strokeStyle = '#00ff00'
+      ctx.lineWidth = 2
+      ctx.strokeRect(
+        state.kid.x + ins.left,
+        state.kid.y + ins.top,
+        state.kid.width - ins.left - ins.right,
+        state.kid.height - ins.top - ins.bottom
+      )
     }
 
     draw()

@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import ParallaxBackground from '../components/ParallaxBackground'
 
 const KID_SPRITES = [
-  '/sprites/boy_sprites/Transparent%20PNG/jump/jump_up.png',
-  '/sprites/boy_sprites/Transparent%20PNG/jump/jump_fall.png',
+  '/sprites/boy_sprites_2/Jump%20(2).png',
+  '/sprites/boy_sprites_2/Jump%20(3).png',
 ]
 
 export default function DifficultySelect({ initialDifficulty = 'medium', onSelect, scoresByDifficulty = {} }) {

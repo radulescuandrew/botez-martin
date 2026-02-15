@@ -42,7 +42,90 @@ function readScoresByDifficulty() {
   return out
 }
 
+const LARGE_SCREEN_BREAKPOINT = 520
+
+function useLargeScreen() {
+  const [isLarge, setIsLarge] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const wide = window.innerWidth > LARGE_SCREEN_BREAKPOINT
+    const pointerFine = window.matchMedia('(pointer: fine)').matches
+    return wide && pointerFine
+  })
+
+  useEffect(() => {
+    const update = () => {
+      const wide = window.innerWidth > LARGE_SCREEN_BREAKPOINT
+      const pointerFine = window.matchMedia('(pointer: fine)').matches
+      setIsLarge(wide && pointerFine)
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
+    }
+  }, [])
+
+  return isLarge
+}
+
+function useMobilePortrait() {
+  const [isPortrait, setIsPortrait] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const touch = window.matchMedia('(pointer: coarse)').matches
+    const portrait = window.innerWidth < window.innerHeight
+    return touch && portrait
+  })
+
+  useEffect(() => {
+    const update = () => {
+      const touch = window.matchMedia('(pointer: coarse)').matches
+      const portrait = window.innerWidth < window.innerHeight
+      setIsPortrait(touch && portrait)
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
+    }
+  }, [])
+
+  return isPortrait
+}
+
+function useMobileLandscape() {
+  const [isLandscape, setIsLandscape] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const touch = window.matchMedia('(pointer: coarse)').matches
+    const landscape = window.innerWidth > window.innerHeight
+    return touch && landscape
+  })
+
+  useEffect(() => {
+    const update = () => {
+      const touch = window.matchMedia('(pointer: coarse)').matches
+      const landscape = window.innerWidth > window.innerHeight
+      setIsLandscape(touch && landscape)
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
+    }
+  }, [])
+
+  return isLandscape
+}
+
 export default function App() {
+  const isLargeScreen = useLargeScreen()
+  const isMobilePortrait = useMobilePortrait()
+  const isMobileLandscape = useMobileLandscape()
   const [hasSeenIntro, setHasSeenIntro] = useState(readIntroSeen)
   const [screen, setScreen] = useState(() => (readIntroSeen() ? 'game' : 'landing'))
   const [attempts, setAttempts] = useState(readAttempts)
@@ -53,6 +136,7 @@ export default function App() {
   const bgAudioRef = useRef(null)
   const gameOverAudioRef = useRef(null)
   const preloadedVideosRef = useRef([])
+  const [rotateOverlayMenuOpen, setRotateOverlayMenuOpen] = useState(false)
 
   const ensureBackgroundSongPlaying = () => {
     if (!bgAudioRef.current) {
@@ -200,8 +284,95 @@ export default function App() {
     }
   }, [screen])
 
+  useEffect(() => {
+    if (screen !== 'game') setRotateOverlayMenuOpen(false)
+  }, [screen])
+
   return (
     <main className="app">
+      {isLargeScreen && (
+        <div className="use-mobile-overlay" role="alert" aria-live="polite">
+          <div className="use-mobile-content">
+            <div className="use-mobile-icon" aria-hidden>
+              <span className="use-mobile-phone" />
+            </div>
+            <p className="use-mobile-title">Doar pe mobil</p>
+            <p className="use-mobile-text">
+              Deschide acest link pe telefon pentru a juca.
+            </p>
+          </div>
+        </div>
+      )}
+      {!isLargeScreen && (
+        <>
+      {isMobilePortrait && screen === 'game' && (
+        <div className="rotate-to-landscape-overlay" role="alert" aria-live="polite">
+          <button
+            type="button"
+            className="rotate-overlay-menu-btn"
+            aria-label="Open menu"
+            onClick={() => setRotateOverlayMenuOpen(true)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+          {rotateOverlayMenuOpen && (
+            <div
+              className="rotate-overlay-menu-backdrop"
+              onClick={() => setRotateOverlayMenuOpen(false)}
+              role="presentation"
+            >
+              <div
+                className="rotate-overlay-menu-panel"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === 'Escape') setRotateOverlayMenuOpen(false)
+                }}
+              >
+                <h2>Meniu</h2>
+                <button
+                  type="button"
+                  className="rotate-overlay-menu-action"
+                  onClick={() => {
+                    setRotateOverlayMenuOpen(false)
+                    goToDifficultyMenu()
+                  }}
+                >
+                  Schimba dificultatea
+                </button>
+                <button
+                  type="button"
+                  className="rotate-overlay-menu-action"
+                  onClick={() => {
+                    setRotateOverlayMenuOpen(false)
+                    goToLanding()
+                  }}
+                >
+                  Inapoi la meniul principal
+                </button>
+                <button
+                  type="button"
+                  className="rotate-overlay-menu-close"
+                  onClick={() => setRotateOverlayMenuOpen(false)}
+                >
+                  Inchide
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="rotate-to-landscape-content">
+            <div className="rotate-to-landscape-icon" aria-hidden>
+              <span className="rotate-phone" />
+            </div>
+            <p className="rotate-to-landscape-title">Landscape</p>
+            <p className="rotate-to-landscape-text">
+              Roteste telefonul orizontal pentru a juca. E mai usor asa.
+            </p>
+          </div>
+        </div>
+      )}
       {screen === 'landing' && (
         <Landing
           onPlay={goToDifficulty}
@@ -234,9 +405,26 @@ export default function App() {
         </div>
       )}
       {screen === 'end' && (
-        <div ref={endRef} className="screen-wrapper">
-          <EndScreen />
-        </div>
+        <>
+          <div ref={endRef} className="screen-wrapper">
+            <EndScreen />
+          </div>
+          {isMobileLandscape && (
+            <div className="rotate-to-portrait-overlay" role="alert" aria-live="polite">
+              <div className="rotate-to-landscape-content">
+                <div className="rotate-to-portrait-icon" aria-hidden>
+                  <span className="rotate-phone-portrait" />
+                </div>
+                <p className="rotate-to-landscape-title">Portrait</p>
+                <p className="rotate-to-landscape-text">
+                  Roteste telefonul in portrait pentru a vedea pagina de final si RSVP.
+                </p>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+        </>
       )}
     </main>
   )
