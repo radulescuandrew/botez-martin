@@ -1,14 +1,24 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { gsap } from 'gsap'
 import BlackHoleTransition from '../components/BlackHoleTransition'
 
 const TRANSITION_MS = 12000
+const KID_SPRITES = [
+  '/sprites/boy_sprites/Transparent%20PNG/jump/jump_up.png',
+  '/sprites/boy_sprites/Transparent%20PNG/jump/jump_fall.png',
+]
 
 export default function Landing({ onPlay, onPlayIntent, attempts, initialUsername = '' }) {
   const containerRef = useRef(null)
   const [username, setUsername] = useState(initialUsername)
   const [error, setError] = useState('')
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [kidFrame, setKidFrame] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => setKidFrame((f) => (f + 1) % 2), 200)
+    return () => clearInterval(id)
+  }, [])
 
   const handlePlay = () => {
     const cleanName = username.trim()
@@ -39,35 +49,54 @@ export default function Landing({ onPlay, onPlayIntent, attempts, initialUsernam
   return (
     <>
       <div ref={containerRef} className="screen landing-screen">
-        <h1 className="landing-title">Bine ai venit!</h1>
-        <p className="landing-subtitle">
-          Martin este pe cale sa se nasca si calatoreste prin spatiu ca sa-si gaseasca
-          drumul spre casa lui: Pamantul. Evita planetele, loveste Pamantul la final
-          si apoi inregistreaza-te pentru Botezul Martinilor.
-        </p>
-        <p className="landing-date">Incercari totale salvate: {attempts}</p>
+        <div className="landing-content">
+          <h1 className="landing-title">Bine ai venit!</h1>
+          <div className="landing-text">
+            <p>
+              Daca ai ajuns aici, inseamna ca parintii mei vor sa fii alaturi de mine la botez.
+            </p>
+            <p>
+            Pana acolo, trebuie sa ma ajuti sa recreez drumul meu catre planeta albastra.
+            </p>
+            <p>
+              Odata ajuns acolo voi putea sa-ti dau mai multe detalii.
+            </p>
+            <p className="landing-incepem">Incepem?</p>
+            <p>
+              Adauga-ti numele complet si hai sa incepem.
+            </p>
+          </div>
 
-        <label htmlFor="username" className="landing-label">Username</label>
-        <input
-          id="username"
-          className="landing-input"
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Ex: Andrei"
-          disabled={isTransitioning}
-          maxLength={24}
-        />
-        {error && <p className="landing-error">{error}</p>}
+          <label htmlFor="username" className="landing-label">Nume complet</label>
+          <input
+            id="username"
+            className="landing-input"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Ex: Martin Radulescu"
+            disabled={isTransitioning}
+            maxLength={24}
+          />
+          {error && <p className="landing-error">{error}</p>}
 
-        <button
-          type="button"
-          className="landing-play-btn"
-          onClick={handlePlay}
-          disabled={isTransitioning}
-        >
-          {isTransitioning ? 'Se incarca...' : 'Play'}
-        </button>
+          <button
+            type="button"
+            className="landing-play-btn"
+            onClick={handlePlay}
+            disabled={isTransitioning}
+          >
+            {isTransitioning ? 'Se incarca...' : 'Play'}
+          </button>
+        </div>
+
+        <div className="landing-kid" aria-hidden>
+          <img
+            src={KID_SPRITES[kidFrame]}
+            alt=""
+            className="landing-kid-sprite"
+          />
+        </div>
       </div>
       <BlackHoleTransition active={isTransitioning} durationMs={TRANSITION_MS} />
     </>

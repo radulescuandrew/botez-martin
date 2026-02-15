@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from 'gsap'
 import Landing from './screens/Landing'
+import DifficultySelect from './screens/DifficultySelect'
 import Game from './screens/Game'
 import EndScreen from './screens/EndScreen'
 import './App.css'
@@ -8,6 +9,8 @@ import './App.css'
 const ATTEMPTS_KEY = 'martins_baptism_attempts'
 const USERNAME_KEY = 'martins_baptism_username'
 const INTRO_SEEN_KEY = 'martins_baptism_intro_seen'
+const DIFFICULTY_KEY = 'martins_baptism_difficulty'
+const BEST_SCORE_PREFIX = 'martins_best_score_'
 
 function readAttempts() {
   const raw = localStorage.getItem(ATTEMPTS_KEY)
@@ -23,11 +26,28 @@ function readIntroSeen() {
   return localStorage.getItem(INTRO_SEEN_KEY) === '1'
 }
 
+function readDifficulty() {
+  const value = localStorage.getItem(DIFFICULTY_KEY)
+  return value === 'easy' || value === 'medium' || value === 'nightmare' ? value : 'medium'
+}
+
+function readScoresByDifficulty() {
+  const diffs = ['easy', 'medium', 'nightmare']
+  const out = {}
+  diffs.forEach((d) => {
+    const raw = localStorage.getItem(BEST_SCORE_PREFIX + d)
+    const n = Number.parseInt(raw ?? '0', 10)
+    out[d] = Number.isFinite(n) && n > 0 ? n : null
+  })
+  return out
+}
+
 export default function App() {
   const [hasSeenIntro, setHasSeenIntro] = useState(readIntroSeen)
   const [screen, setScreen] = useState(() => (readIntroSeen() ? 'game' : 'landing'))
   const [attempts, setAttempts] = useState(readAttempts)
   const [username, setUsername] = useState(readUsername)
+  const [difficulty, setDifficulty] = useState(readDifficulty)
   const gameRef = useRef(null)
   const endRef = useRef(null)
   const bgAudioRef = useRef(null)
@@ -76,16 +96,21 @@ export default function App() {
     }
   }
 
-  const goToGame = (nextUsername) => {
+  const goToDifficulty = (nextUsername) => {
     const cleanName = nextUsername.trim()
     setUsername(cleanName)
-    setAttempts((value) => value + 1)
     setHasSeenIntro(true)
+    setScreen('difficulty')
+  }
+  const startGameWithDifficulty = (selectedDifficulty) => {
+    setDifficulty(selectedDifficulty)
+    setAttempts((value) => value + 1)
     setScreen('game')
   }
   const goToEnd = () => setScreen('end')
   const countRetry = () => setAttempts((value) => value + 1)
   const goToLanding = () => setScreen('landing')
+  const goToDifficultyMenu = () => setScreen('difficulty')
 
   useEffect(() => {
     localStorage.setItem(ATTEMPTS_KEY, String(attempts))
@@ -98,6 +123,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(INTRO_SEEN_KEY, hasSeenIntro ? '1' : '0')
   }, [hasSeenIntro])
+
+  useEffect(() => {
+    localStorage.setItem(DIFFICULTY_KEY, difficulty)
+  }, [difficulty])
 
   // Best-effort: if app opens directly in game (e.g. after refresh), try to start music.
   useEffect(() => {
@@ -175,10 +204,17 @@ export default function App() {
     <main className="app">
       {screen === 'landing' && (
         <Landing
-          onPlay={goToGame}
+          onPlay={goToDifficulty}
           onPlayIntent={ensureBackgroundSongPlaying}
           attempts={attempts}
           initialUsername={username}
+        />
+      )}
+      {screen === 'difficulty' && (
+        <DifficultySelect
+          initialDifficulty={difficulty}
+          onSelect={startGameWithDifficulty}
+          scoresByDifficulty={readScoresByDifficulty()}
         />
       )}
       {screen === 'game' && (
@@ -187,8 +223,10 @@ export default function App() {
             onReachEnd={goToEnd}
             attempts={attempts}
             username={username}
+            difficulty={difficulty}
             onRetry={countRetry}
             onBackToIntro={goToLanding}
+            onChangeDifficulty={goToDifficultyMenu}
             onRunStartAudio={ensureBackgroundSongPlaying}
             onRunFailAudio={playGameOverSong}
             onEarthHit={stopBackgroundSong}

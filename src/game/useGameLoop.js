@@ -32,9 +32,11 @@ function isDevFastFinishEnabled() {
   return fromQuery === '1' || fromStorage === '1'
 }
 
-function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = false) {
+function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = false, planetProfile = {}) {
   const planets = []
   const sourceGates = devFastFinish ? gates.slice(0, 3) : gates
+  const radiusScale = planetProfile.radiusScale ?? 1
+  const sideMode = planetProfile.sideMode ?? 'normal'
 
   sourceGates.forEach((gate, idx) => {
     const gapTop = gate.gapY
@@ -43,7 +45,7 @@ function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = 
     const baseX = gate.x + gate.width / 2
 
     const topSeed = idx * 7 + 11
-    const topRadius = 11 + Math.floor(seededUnit(topSeed) * 10)
+    const topRadius = Math.round((11 + Math.floor(seededUnit(topSeed) * 10)) * radiusScale)
     const topYIdeal = gapTop - topRadius - 8 - Math.floor(seededUnit(topSeed + 1) * 7)
     const topY = clamp(topYIdeal, topRadius + 4, Math.max(topRadius + 4, gapTop - topRadius - 2))
     const topX = baseX + Math.floor((seededUnit(topSeed + 2) - 0.5) * 20)
@@ -55,7 +57,7 @@ function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = 
     })
 
     const bottomSeed = idx * 9 + 23
-    const bottomRadius = 12 + Math.floor(seededUnit(bottomSeed) * 11)
+    const bottomRadius = Math.round((12 + Math.floor(seededUnit(bottomSeed) * 11)) * radiusScale)
     const bottomYIdeal = gapBottom + bottomRadius + 8 + Math.floor(seededUnit(bottomSeed + 1) * 7)
     const bottomY = clamp(
       bottomYIdeal,
@@ -71,9 +73,9 @@ function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = 
     })
 
     // Add occasional side planets to create a more "field of planets" feel.
-    if (idx % 2 === 0) {
+    if (sideMode !== 'none' && idx % 2 === 0) {
       const midSeed = idx * 13 + 37
-      const sideRadius = 8 + Math.floor(seededUnit(midSeed) * 8)
+      const sideRadius = Math.round((8 + Math.floor(seededUnit(midSeed) * 8)) * radiusScale)
       const sideDir = idx % 4 < 2 ? -1 : 1
       const sideX = baseX + sideDir * (14 + Math.floor(seededUnit(midSeed + 1) * 24))
       const sideY = clamp(
@@ -87,6 +89,23 @@ function buildPlanets(gates, groundY, levelLength, canvasWidth, devFastFinish = 
         radius: sideRadius,
         spriteIndex: Math.floor(seededUnit(midSeed + 3) * 1000),
       })
+
+      if (sideMode === 'dense') {
+        const extraSeed = idx * 17 + 51
+        const extraRadius = Math.round((7 + Math.floor(seededUnit(extraSeed) * 8)) * radiusScale)
+        const extraY = clamp(
+          gapCenter + Math.floor((seededUnit(extraSeed + 1) - 0.5) * 34),
+          extraRadius + 4,
+          groundY - extraRadius - 4
+        )
+        const extraX = baseX + Math.floor((seededUnit(extraSeed + 2) - 0.5) * 56)
+        planets.push({
+          x: extraX,
+          y: extraY,
+          radius: extraRadius,
+          spriteIndex: Math.floor(seededUnit(extraSeed + 3) * 1000),
+        })
+      }
     }
   })
 
@@ -131,7 +150,7 @@ export function useGameLoop({
     velY: 0,
   })
   const [planets, setPlanets] = useState(() =>
-    buildPlanets(level.gates || [], groundY, level.length, canvasWidth, devFastFinish)
+    buildPlanets(level.gates || [], groundY, level.length, canvasWidth, devFastFinish, level.planetProfile)
   )
   const [scrollX, setScrollX] = useState(0)
   const [restartCounter, setRestartCounter] = useState(0)
@@ -153,7 +172,14 @@ export function useGameLoop({
     frameCountRef.current = 0
     const centerY = Math.floor((canvasHeight - kidHeight) / 2)
     kidRef.current = { y: centerY, velY: 0 }
-    const resetPlanets = buildPlanets(level.gates || [], groundY, level.length, canvasWidth, devFastFinish)
+    const resetPlanets = buildPlanets(
+      level.gates || [],
+      groundY,
+      level.length,
+      canvasWidth,
+      devFastFinish,
+      level.planetProfile
+    )
     const kidState = {
       x: kidScreenX,
       y: centerY,
@@ -167,7 +193,7 @@ export function useGameLoop({
     setScrollX(0)
     gameStateRef.current = { kid: kidState, planets: resetPlanets, scrollX: 0, groundY, earthHit: null }
     setRestartCounter((c) => c + 1)
-  }, [level.gates, level.length, kidScreenX, canvasHeight, canvasWidth, groundY, kidWidth, kidHeight, devFastFinish])
+  }, [level.gates, level.length, level.planetProfile, kidScreenX, canvasHeight, canvasWidth, groundY, kidWidth, kidHeight, devFastFinish])
 
   useEffect(() => {
     kidScreenXRef.current = kidScreenX
@@ -186,7 +212,14 @@ export function useGameLoop({
 
   useEffect(() => {
     let rafId
-    const planetsData = buildPlanets(level.gates || [], groundY, level.length, canvasWidth, devFastFinish)
+    const planetsData = buildPlanets(
+      level.gates || [],
+      groundY,
+      level.length,
+      canvasWidth,
+      devFastFinish,
+      level.planetProfile
+    )
     const earth = planetsData.find((p) => p.kind === 'earth')
 
     let lastFrameTime = null
@@ -325,7 +358,7 @@ export function useGameLoop({
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [level.gates, level.length, canvasWidth, groundY, scrollSpeed, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, devFastFinish])
+  }, [level.gates, level.length, level.planetProfile, canvasWidth, groundY, scrollSpeed, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, devFastFinish])
 
   return {
     kid,

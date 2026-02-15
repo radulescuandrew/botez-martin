@@ -9,6 +9,20 @@ const BASE_CANVAS_WIDTH = 320
 const BASE_CANVAS_HEIGHT = 180
 const WIN_LANDED_MS = 3000
 const WIN_TRANSITION_MS = 2200
+const LAST_SCORE_KEY = 'martins_last_score'
+const HIGH_SCORE_KEY = 'martins_high_score'
+const BEST_SCORE_BY_DIFFICULTY_PREFIX = 'martins_best_score_'
+const BASE_SCORE_UNIT = 10
+const WIN_BONUS = 2000
+const SCROLL_DIVISOR = 100
+
+function scrollToScoreBase(scroll) {
+  return Math.floor(scroll / SCROLL_DIVISOR) * BASE_SCORE_UNIT
+}
+
+function getDifficultyMultiplier(diff) {
+  return diff === 'easy' ? 1 : diff === 'nightmare' ? 3 : 2
+}
 
 const BOY_SPRITES_BASE = '/sprites/boy_sprites/Transparent%20PNG'
 const PLANET_SPRITES_BASE = '/sprites/planet_sprites'
@@ -38,8 +52,10 @@ export default function Game({
   onReachEnd,
   attempts,
   username,
+  difficulty = 'medium',
   onRetry,
   onBackToIntro,
+  onChangeDifficulty,
   onRunStartAudio,
   onRunFailAudio,
   onEarthHit,
@@ -53,15 +69,25 @@ export default function Game({
   const runAudioTriggeredRef = useRef(false)
   const [gameOver, setGameOver] = useState(false)
   const [winPhase, setWinPhase] = useState('none') // none | landed | transition | video
+  const [lastScore, setLastScore] = useState(() => Number.parseInt(localStorage.getItem(LAST_SCORE_KEY) || '0', 10) || 0)
+  const [highScore, setHighScore] = useState(() => Number.parseInt(localStorage.getItem(HIGH_SCORE_KEY) || '0', 10) || 0)
+  const [isNewHighScore, setIsNewHighScore] = useState(false)
+  const [winScore, setWinScore] = useState(null)
+  const [isNewBestWin, setIsNewBestWin] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [retryLocked, setRetryLocked] = useState(false)
+  const [retryLockCycle, setRetryLockCycle] = useState(0)
   const [isMobile, setIsMobile] = useState(() => (
     window.matchMedia('(max-width: 900px), (pointer: coarse)').matches
   ))
   const winPhaseRef = useRef('none')
   const winTimerRef = useRef(null)
+  const retryLockTimerRef = useRef(null)
   const winVideoRef = useRef(null)
   const logicalWidth = isMobile ? 512 : BASE_CANVAS_WIDTH
   const logicalHeight = isMobile ? 288 : BASE_CANVAS_HEIGHT
   const ignoreReachEndRef = useCallback(() => {}, [])
+  const difficultyMultiplier = getDifficultyMultiplier(difficulty)
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 900px), (pointer: coarse)')
@@ -106,14 +132,63 @@ export default function Game({
   }, [])
 
   const tunedLevel = useMemo(() => {
-    if (!isMobile) return LEVEL
+    let difficultyLevel = LEVEL
+    if (difficulty === 'easy') {
+      const easyGates = LEVEL.gates
+        .filter((_, i) => i % 2 === 0)
+        .map((gate) => ({
+          ...gate,
+          width: Math.max(34, gate.width - 4),
+          gapHeight: gate.gapHeight + 14,
+        }))
+      difficultyLevel = {
+        ...LEVEL,
+        length: 2200,
+        scrollSpeed: LEVEL.scrollSpeed * 0.86,
+        gates: easyGates,
+        planetProfile: { sideMode: 'none', radiusScale: 0.9 },
+      }
+    } else if (difficulty === 'nightmare') {
+      const midGates = []
+      for (let i = 0; i < LEVEL.gates.length - 1; i += 1) {
+        const a = LEVEL.gates[i]
+        const b = LEVEL.gates[i + 1]
+        midGates.push({
+          x: Math.round((a.x + b.x) / 2),
+          gapY: Math.max(20, Math.round((a.gapY + b.gapY) / 2) + (i % 3 === 0 ? -10 : 8)),
+          gapHeight: Math.max(30, Math.round((a.gapHeight + b.gapHeight) / 2) - 9),
+          width: Math.min(56, Math.round((a.width + b.width) / 2) + 6),
+        })
+      }
+      const base = [...LEVEL.gates, ...midGates].sort((g1, g2) => g1.x - g2.x)
+      const tail = base.slice(Math.floor(base.length * 0.35)).map((gate, idx) => ({
+        ...gate,
+        x: gate.x + 2700 + idx * 8,
+        gapHeight: Math.max(28, gate.gapHeight - 4),
+        width: Math.min(60, gate.width + 2),
+      }))
+      difficultyLevel = {
+        ...LEVEL,
+        length: 6800,
+        scrollSpeed: LEVEL.scrollSpeed * 1.06,
+        gates: [...base, ...tail],
+        planetProfile: { sideMode: 'dense', radiusScale: 1.12 },
+      }
+    } else {
+      difficultyLevel = {
+        ...LEVEL,
+        planetProfile: { sideMode: 'normal', radiusScale: 1 },
+      }
+    }
+
+    if (!isMobile) return difficultyLevel
     const yScale = logicalHeight / BASE_CANVAS_HEIGHT
     const mobileGroundY = logicalHeight - 14
     return {
-      ...LEVEL,
+      ...difficultyLevel,
       groundY: mobileGroundY,
-      scrollSpeed: LEVEL.scrollSpeed * 0.82,
-      gates: LEVEL.gates.map((gate) => {
+      scrollSpeed: difficultyLevel.scrollSpeed * 0.82,
+      gates: difficultyLevel.gates.map((gate) => {
         const scaledGapHeight = Math.round(gate.gapHeight * yScale)
         const scaledGapY = Math.round(gate.gapY * yScale)
         const nextGapHeight = Math.min(scaledGapHeight + 12, Math.round(logicalHeight * 0.38))
@@ -126,7 +201,7 @@ export default function Game({
         }
       }),
     }
-  }, [isMobile, logicalHeight])
+  }, [isMobile, logicalHeight, difficulty])
 
   useEffect(() => {
     const base = BOY_SPRITES_BASE
@@ -173,6 +248,8 @@ export default function Game({
     kidHeight: isMobile ? 20 : 22,
     kidScreenRatio: isMobile ? 0.42 : 0.5,
   })
+  const baseScore = scrollToScoreBase(scrollX) + (winPhase !== 'none' ? WIN_BONUS : 0)
+  const score = baseScore * difficultyMultiplier
 
   const handleReachEarth = useCallback((payload) => {
     if (!payload?.earth || winPhaseRef.current !== 'none') return
@@ -181,6 +258,7 @@ export default function Game({
     setWinPhase('landed')
 
     const state = gameStateRef.current
+    const scroll = payload.scrollX ?? state?.scrollX ?? 0
     if (state?.kid) {
       const earthScreenX = payload.earth.x - payload.scrollX
       const kidX = earthScreenX - state.kid.width / 2
@@ -188,6 +266,18 @@ export default function Game({
       const landedKid = { ...state.kid, x: kidX, y: kidY, velY: 0 }
       gameStateRef.current = { ...state, kid: landedKid, scrollX: payload.scrollX }
     }
+
+    const baseScoreWin = scrollToScoreBase(scroll) + WIN_BONUS
+    const finalScore = baseScoreWin * difficultyMultiplier
+    localStorage.setItem(LAST_SCORE_KEY, String(finalScore))
+    const storedHigh = Number.parseInt(localStorage.getItem(HIGH_SCORE_KEY) || '0', 10) || 0
+    localStorage.setItem(HIGH_SCORE_KEY, String(Math.max(storedHigh, finalScore)))
+    const difficultyKey = BEST_SCORE_BY_DIFFICULTY_PREFIX + difficulty
+    const storedBest = Number.parseInt(localStorage.getItem(difficultyKey) || '0', 10) || 0
+    const isNewBest = finalScore > storedBest
+    localStorage.setItem(difficultyKey, String(Math.max(storedBest, finalScore)))
+    setWinScore(finalScore)
+    setIsNewBestWin(isNewBest)
 
     winTimerRef.current = window.setTimeout(() => {
       winPhaseRef.current = 'transition'
@@ -197,11 +287,12 @@ export default function Game({
         setWinPhase('video')
       }, WIN_TRANSITION_MS)
     }, WIN_LANDED_MS)
-  }, [gameStateRef, onEarthHit])
+  }, [gameStateRef, onEarthHit, difficulty, difficultyMultiplier])
 
   useEffect(() => {
     return () => {
       if (winTimerRef.current) window.clearTimeout(winTimerRef.current)
+      if (retryLockTimerRef.current) window.clearTimeout(retryLockTimerRef.current)
     }
   }, [])
 
@@ -223,23 +314,54 @@ export default function Game({
   // Game over: show overlay (no auto-restart; user taps to try again)
   useEffect(() => {
     if (!gameOver) return
+    setRetryLocked(true)
+    setRetryLockCycle((c) => c + 1)
+    if (retryLockTimerRef.current) window.clearTimeout(retryLockTimerRef.current)
+    retryLockTimerRef.current = window.setTimeout(() => {
+      setRetryLocked(false)
+    }, 2000)
     runAudioTriggeredRef.current = false
     if (onRunFailAudio) onRunFailAudio()
+
+    const scroll = gameStateRef.current?.scrollX || 0
+    const baseScoreNoWin = Math.max(0, scrollToScoreBase(scroll))
+    const runScore = baseScoreNoWin * difficultyMultiplier
+    setLastScore(runScore)
+    localStorage.setItem(LAST_SCORE_KEY, String(runScore))
+
+    const storedHigh = Number.parseInt(localStorage.getItem(HIGH_SCORE_KEY) || '0', 10) || 0
+    const baseHigh = Math.max(highScore, storedHigh)
+    const nextHigh = Math.max(baseHigh, runScore)
+    const reachedNewHigh = runScore >= baseHigh && runScore > 0
+    setHighScore(nextHigh)
+    setIsNewHighScore(reachedNewHigh)
+    localStorage.setItem(HIGH_SCORE_KEY, String(nextHigh))
+    const difficultyKey = BEST_SCORE_BY_DIFFICULTY_PREFIX + difficulty
+    const storedBest = Number.parseInt(localStorage.getItem(difficultyKey) || '0', 10) || 0
+    localStorage.setItem(difficultyKey, String(Math.max(storedBest, runScore)))
+
     const overlay = overlayRef.current
     if (overlay) {
       gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.2 })
     }
-  }, [gameOver, onRunFailAudio])
+  }, [gameOver, onRunFailAudio, gameStateRef, difficultyMultiplier, highScore, difficulty])
+
+  const handleWinVideoEnd = useCallback(() => {
+    onReachEnd()
+  }, [onReachEnd])
 
   const handlePointerDown = (e) => {
     e.preventDefault()
-    if (winPhaseRef.current !== 'none') return
+    if (winPhaseRef.current !== 'none' || menuOpen) return
     if (gameOver) {
+      if (retryLocked) return
       if (onRunStartAudio) onRunStartAudio()
       runAudioTriggeredRef.current = false
+      setIsNewHighScore(false)
       if (onRetry) onRetry()
       reset()
       setGameOver(false)
+      setRetryLocked(false)
     } else {
       if (scrollX <= 0 && onRunStartAudio && !runAudioTriggeredRef.current) {
         runAudioTriggeredRef.current = true
@@ -387,21 +509,23 @@ export default function Game({
       aria-label="Tap to fly"
       onPointerDown={handlePointerDown}
     >
-      {onBackToIntro && (
-        <button
-          type="button"
-          className="game-back-btn"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation()
-            onBackToIntro()
-          }}
-        >
-          Back to first page
-        </button>
-      )}
+      <button
+        type="button"
+        className="game-menu-btn"
+        aria-label="Open menu"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation()
+          setMenuOpen(true)
+        }}
+      >
+        <span />
+        <span />
+        <span />
+      </button>
       <p className="game-attempts">Incercari: {attempts}</p>
-      {username && <p className="game-username">Jucator: {username}</p>}
+      {username && <p className="game-username">{username}</p>}
+      <p className="game-score">Scor: {score}</p>
       <p className={`game-controls-hint ${scrollX > 0 ? 'hidden' : ''}`}>
         Tap or press space to start and fly
       </p>
@@ -413,7 +537,84 @@ export default function Game({
       />
       {gameOver && (
         <div ref={overlayRef} className="game-over-overlay">
-          <p>Game over! Tap to try again.</p>
+          {isNewHighScore && (
+            <div className="highscore-celebration" aria-hidden="true">
+              <p className="highscore-celebration-text">HIGH</p>
+              <p className="highscore-celebration-text">SCORE</p>
+            </div>
+          )}
+          <div className="game-over-card">
+            <p className="game-over-title">Game over!</p>
+            <p className="game-over-score">Last score: {lastScore}</p>
+            <p className={`game-over-score ${isNewHighScore ? 'highscore-hit' : ''}`}>
+              High score: {highScore}
+            </p>
+            {isNewHighScore && <p className="new-high-badge">New High Score</p>}
+            {retryLocked ? (
+              <div className="retry-bar-track">
+                <div key={retryLockCycle} className="retry-bar-fill" />
+              </div>
+            ) : (
+              <p className="game-over-hint">Tap to try again</p>
+            )}
+          </div>
+        </div>
+      )}
+      {winPhase === 'landed' && (
+        <div className="win-celebration-overlay">
+          {isNewBestWin && (
+            <div className="highscore-celebration win-celebration-badge" aria-hidden="true">
+              <p className="highscore-celebration-text">RECORD</p>
+              <p className="highscore-celebration-text">NOU</p>
+            </div>
+          )}
+          <div className="game-over-card win-celebration-card">
+            <p className="game-over-title win-celebration-title">Felicitari!</p>
+            <p className="game-over-score">Scor: {winScore ?? 0}</p>
+            {isNewBestWin && <p className="new-high-badge">Record nou la aceasta dificultate!</p>}
+          </div>
+        </div>
+      )}
+      {menuOpen && (
+        <div
+          className="game-menu-overlay"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setMenuOpen(false)}
+        >
+          <div
+            className="game-menu-panel"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <h2>Meniu</h2>
+            <button
+              type="button"
+              className="game-menu-action"
+              onClick={() => {
+                setMenuOpen(false)
+                if (onChangeDifficulty) onChangeDifficulty()
+              }}
+            >
+              Change difficulty
+            </button>
+            <button
+              type="button"
+              className="game-menu-action"
+              onClick={() => {
+                setMenuOpen(false)
+                if (onBackToIntro) onBackToIntro()
+              }}
+            >
+              Back to main menu
+            </button>
+            <button
+              type="button"
+              className="game-menu-close"
+              onClick={() => setMenuOpen(false)}
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
       {winPhase === 'transition' && (
@@ -429,7 +630,7 @@ export default function Game({
             muted
             preload="auto"
             playsInline
-            onEnded={onReachEnd}
+            onEnded={handleWinVideoEnd}
           />
         </div>
       )}
