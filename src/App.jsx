@@ -32,6 +32,7 @@ export default function App() {
   const endRef = useRef(null)
   const bgAudioRef = useRef(null)
   const gameOverAudioRef = useRef(null)
+  const preloadedVideosRef = useRef([])
 
   const ensureBackgroundSongPlaying = () => {
     if (!bgAudioRef.current) {
@@ -132,6 +133,29 @@ export default function App() {
     if (gameOverAudioRef.current) {
       gameOverAudioRef.current.pause()
       gameOverAudioRef.current = null
+    }
+  }, [])
+
+  // Preload videos early so transition playback starts faster on mobile Safari.
+  useEffect(() => {
+    const videoUrls = ['/placenta.mp4', '/martin.mp4']
+    const nodes = videoUrls.map((url) => {
+      const v = document.createElement('video')
+      v.preload = 'auto'
+      v.src = url
+      v.muted = true
+      v.playsInline = true
+      v.load()
+      return v
+    })
+    preloadedVideosRef.current = nodes
+    return () => {
+      preloadedVideosRef.current.forEach((v) => {
+        v.pause()
+        v.removeAttribute('src')
+        v.load()
+      })
+      preloadedVideosRef.current = []
     }
   }, [])
 

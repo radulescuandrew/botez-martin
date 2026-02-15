@@ -29,6 +29,7 @@ export default function EndScreen() {
           autoPlay
           loop
           muted
+          preload="auto"
           playsInline
         />
       </div>

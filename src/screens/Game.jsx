@@ -58,6 +58,7 @@ export default function Game({
   ))
   const winPhaseRef = useRef('none')
   const winTimerRef = useRef(null)
+  const winVideoRef = useRef(null)
   const logicalWidth = isMobile ? 512 : BASE_CANVAS_WIDTH
   const logicalHeight = isMobile ? 288 : BASE_CANVAS_HEIGHT
   const ignoreReachEndRef = useCallback(() => {}, [])
@@ -203,6 +204,17 @@ export default function Game({
       if (winTimerRef.current) window.clearTimeout(winTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (winPhase !== 'video' || !winVideoRef.current) return
+    const video = winVideoRef.current
+    video.muted = true
+    video.defaultMuted = true
+    video.playsInline = true
+    video.preload = 'auto'
+    const p = video.play()
+    if (p && typeof p.catch === 'function') p.catch(() => {})
+  }, [winPhase])
 
   const handleFlap = () => {
     flapRef.current = true
@@ -410,9 +422,12 @@ export default function Game({
       {winPhase === 'video' && (
         <div className="win-video-overlay">
           <video
+            ref={winVideoRef}
             className="win-video"
             src="/placenta.mp4"
             autoPlay
+            muted
+            preload="auto"
             playsInline
             onEnded={onReachEnd}
           />
