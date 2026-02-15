@@ -1,0 +1,36 @@
+.invite-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #0a0c1a 0%, #1a1d3a 100%);
+  color: #fff;
+  text-align: center;
+}
+
+.invite-page-message {
+  margin: 0 0 1.5rem;
+  font-size: 1.4rem;
+  line-height: 1.5;
+}
+
+.invite-page-message strong {
+  color: #b8c5ff;
+}
+
+.invite-page-btn {
+  padding: 0.75rem 1.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #0a0c1a;
+  background: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.invite-page-btn:hover {
+  background: #e8ebff;
+}

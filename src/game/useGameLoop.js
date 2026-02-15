@@ -6,7 +6,6 @@ const SIMULATION_SPEED = 1.7
 const DEFAULT_KID_WIDTH = 22
 const DEFAULT_KID_HEIGHT = 22
 const GROUND_MARGIN = 4
-const DEV_FAST_FINISH_STORAGE_KEY = 'dev_fast_finish'
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
@@ -28,8 +27,13 @@ function checkCircleAABB(circle, rect) {
 function isDevFastFinishEnabled() {
   if (!import.meta.env.DEV || typeof window === 'undefined') return false
   const fromQuery = new URLSearchParams(window.location.search).get('dev_fast_finish')
-  const fromStorage = window.localStorage.getItem(DEV_FAST_FINISH_STORAGE_KEY)
-  return fromQuery === '1' || fromStorage === '1'
+  if (fromQuery === '1') return true
+
+  // Cleanup legacy persisted dev flag so normal runs are not accidentally truncated.
+  if (window.localStorage.getItem('dev_fast_finish') === '1') {
+    window.localStorage.removeItem('dev_fast_finish')
+  }
+  return false
 }
 
 function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinish = false, planetProfile = {}) {
@@ -37,6 +41,7 @@ function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinis
   const source = devFastFinish ? obstacles.slice(0, 5) : obstacles
   const radiusScale = planetProfile.radiusScale ?? 1
   const sideMode = planetProfile.sideMode ?? 'normal'
+  const centerEvery = planetProfile.centerEvery ?? 0
 
   source.forEach((ob, idx) => {
     const type = ob.type || 'gate'
@@ -159,6 +164,24 @@ function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinis
           spriteIndex: Math.floor(seededUnit(extraSeed + 3) * 1000),
         })
       }
+    }
+
+    // Optional center-lane pressure so runs don't feel empty in the middle.
+    if (centerEvery > 0 && idx % centerEvery === 0) {
+      const cSeed = idx * 19 + 91
+      const cRadius = Math.round((9 + Math.floor(seededUnit(cSeed) * 7)) * radiusScale)
+      const cX = baseX + Math.floor((seededUnit(cSeed + 1) - 0.5) * 20)
+      const cY = clamp(
+        gapCenter + Math.floor((seededUnit(cSeed + 2) - 0.5) * 12),
+        cRadius + 10,
+        groundY - cRadius - 10
+      )
+      planets.push({
+        x: cX,
+        y: cY,
+        radius: cRadius,
+        spriteIndex: Math.floor(seededUnit(cSeed + 3) * 1000),
+      })
     }
   })
 

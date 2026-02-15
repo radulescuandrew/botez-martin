@@ -43,7 +43,7 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
       <div className="difficulty-grid">
         <button
           type="button"
-          className={`difficulty-card ${initialDifficulty === 'easy' ? 'active' : ''}`}
+          className={`difficulty-card easy ${initialDifficulty === 'easy' ? 'active' : ''}`}
           onClick={() => onSelect('easy')}
         >
           <div className="difficulty-card-head">
@@ -57,7 +57,7 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
         </button>
         <button
           type="button"
-          className={`difficulty-card ${initialDifficulty === 'medium' ? 'active' : ''}`}
+          className={`difficulty-card medium ${initialDifficulty === 'medium' ? 'active' : ''}`}
           onClick={() => onSelect('medium')}
         >
           <div className="difficulty-card-head">

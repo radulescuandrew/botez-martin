@@ -3,12 +3,19 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
 const CRAWL_LINES = [
-  'Martin este pe cale sa se nasca.',
-  'Pana sa ajunga acasa, calatoreste prin univers printre planete.',
-  'Drumul lui are un singur final: Pamantul.',
-  'Evita obstacolele, ramai pe traiectorie si cauta planeta albastra.',
-  'Misiunea se incheie doar cand atingi Pamantul.',
-  'Calatoria lui Martin incepe acum...',
+  'Intr-un univers nu foarte indepartat...',
+  'Se apropie ziua in care Martin va fi botezat.',
+  'Martin se pregateste serios pentru aceasta zi.',
+  'Probabil o sa intre in picioare in cristelnita la cat de mare e...',
+  'Dar tu ai un rol important',
+  'Il ajuti sa ajunga la biserica completand urmatorul joc.',
+  'Abia apoi vei afla detaliile despre ziua cea mare.',
+  'P.S: Jucatorul cu cel mai mare scor, va avea o surpriza!',
+  'Calatoria lui Martin incepe acum, cu tine alaturi.',
+  '3..', 
+  '2...',
+  '1...',
+  "START!"
 ]
 
 function StarTunnel({ active }) {
@@ -68,11 +75,38 @@ function Scene({ active }) {
   )
 }
 
-export default function BlackHoleTransition({ active, durationMs = 5200, showStory = true }) {
+// Fixed crawl speed (independent of how long the transition screen stays visible)
+const CRAWL_TRAVEL_MS = 12000
+const CRAWL_SPAWN_INTERVAL_MS = Math.max(2800, Math.floor(CRAWL_TRAVEL_MS / (CRAWL_LINES.length + 1)))
+
+const CRAWL_AUDIO_SRC = '/starwars.mp3'
+
+export default function BlackHoleTransition({ active, showStory = true }) {
   const [activeLines, setActiveLines] = useState([])
   const timersRef = useRef([])
-  const travelDuration = Math.max(16000, Math.floor(durationMs * 1.4))
-  const spawnInterval = Math.max(1700, Math.floor(travelDuration / (CRAWL_LINES.length + 1)))
+  const audioRef = useRef(null)
+  // Parent controls how long the screen stays via its own timeout; crawl speed is fixed below
+  const travelDuration = CRAWL_TRAVEL_MS
+  const spawnInterval = CRAWL_SPAWN_INTERVAL_MS
+
+  useEffect(() => {
+    if (!audioRef.current && typeof window !== 'undefined') {
+      audioRef.current = new Audio(CRAWL_AUDIO_SRC)
+    }
+    const audio = audioRef.current
+    if (!audio) return
+    if (active && showStory) {
+      audio.currentTime = 0
+      audio.play().catch(() => {})
+    } else {
+      audio.pause()
+      audio.currentTime = 0
+    }
+    return () => {
+      audio.pause()
+      audio.currentTime = 0
+    }
+  }, [active, showStory])
 
   useEffect(() => {
     timersRef.current.forEach((id) => window.clearTimeout(id))
