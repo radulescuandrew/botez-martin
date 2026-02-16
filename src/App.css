@@ -1153,6 +1153,14 @@
   font-size: clamp(0.92rem, 1.6vw, 1.15rem);
 }
 
+.game-over-prize {
+  margin: 0.35rem 0 0.2rem;
+  font-size: clamp(1rem, 1.8vw, 1.25rem);
+  font-weight: 600;
+  color: #ffd54f;
+  text-shadow: 0 0 12px rgba(255, 213, 79, 0.5);
+}
+
 .new-high-badge {
   margin: 0.55rem auto 0.4rem;
   font-size: clamp(0.85rem, 1.4vw, 1.08rem);

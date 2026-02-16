@@ -957,6 +957,7 @@ export default function Game({
             <p className={`game-over-score ${isNewHighScore ? 'highscore-hit' : ''}`}>
               High score: {highScore}
             </p>
+            <p className="game-over-prize">100 € pentru cel mai bun scor 💰 💵 💶</p>
             {isNewHighScore && <p className="new-high-badge">New High Score</p>}
             {topTenRows.length > 0 && (
               <div className="gameover-top3 gameover-top10">
