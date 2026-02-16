@@ -40,16 +40,13 @@ export default function Admin() {
   const loadProgress = useCallback(async () => {
     if (!supabase || !isAdmin) return
     setProgressError('')
-    const { data, error } = await supabase
-      .from('user_progress')
-      .select('id, attempts, username, intro_seen, difficulty, last_score, high_score, best_score_easy, best_score_medium, best_score_nightmare, updated_at')
-      .order('updated_at', { ascending: false })
+    const { data, error } = await supabase.rpc('get_admin_all_progress')
     if (error) {
       setProgressError(error.message ?? 'Eroare la incarcarea progresului.')
       setProgressList([])
       return
     }
-    setProgressList(data ?? [])
+    setProgressList(Array.isArray(data) ? data : [])
   }, [isAdmin])
 
   const loadRsvps = useCallback(async () => {
@@ -253,6 +250,7 @@ export default function Admin() {
   const unconfirmedInvitees = Math.max(0, invitees.length - respondedInvitees)
   const comingPeopleCount = comingInvitees.reduce((sum, row) => sum + 1 + Math.max(0, Number(row.plus_one_count) || 0), 0)
   const notComingPeopleCount = notComingInvitees.reduce((sum, row) => sum + 1 + Math.max(0, Number(row.plus_one_count) || 0), 0)
+  const completedList = (progressList || []).filter((r) => r.completed_game)
 
   return (
     <div className="admin-page">
@@ -348,7 +346,42 @@ export default function Admin() {
 
         <details className="admin-card admin-collapsible" open>
           <summary className="admin-collapsible-summary">
-            <span className="admin-subtitle">Progres si scoruri (jucatori)</span>
+            <span className="admin-subtitle">Istoric joc (cine a terminat jocul)</span>
+            <span className="admin-collapsible-meta">{completedList.length}</span>
+          </summary>
+          <div className="admin-collapsible-content">
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Nume</th>
+                    <th>Sursa</th>
+                    <th>Completat la</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {completedList.length === 0 ? (
+                    <tr>
+                      <td colSpan={3}>Nimeni nu a terminat jocul inca.</td>
+                    </tr>
+                  ) : (
+                    completedList.map((row) => (
+                      <tr key={`${row.source}-${row.id}`}>
+                        <td>{row.display_name ?? row.username ?? '(anonim)'}</td>
+                        <td>{row.source === 'invite' ? 'Invite' : 'Auth'}</td>
+                        <td>{formatDate(row.completed_at)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details className="admin-card admin-collapsible" open>
+          <summary className="admin-collapsible-summary">
+            <span className="admin-subtitle">Progres si scoruri (toti jucatorii)</span>
             <span className="admin-collapsible-meta">{progressList.length}</span>
           </summary>
           <div className="admin-collapsible-content">
@@ -358,6 +391,7 @@ export default function Admin() {
                 <thead>
                   <tr>
                     <th>Nume jucator</th>
+                    <th>Sursa</th>
                     <th>Incercari</th>
                     <th>Dificultate</th>
                     <th>Ultimul scor</th>
@@ -371,12 +405,13 @@ export default function Admin() {
                 <tbody>
                   {progressList.length === 0 ? (
                     <tr>
-                      <td colSpan={9}>Niciun progres inca.</td>
+                      <td colSpan={10}>Niciun progres inca.</td>
                     </tr>
                   ) : (
                     progressList.map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.username || '(anonim)'}</td>
+                      <tr key={`${row.source}-${row.id}`}>
+                        <td>{row.display_name ?? row.username ?? '(anonim)'}</td>
+                        <td>{row.source === 'invite' ? 'Invite' : 'Auth'}</td>
                         <td>{fmt(row.attempts)}</td>
                         <td>
                           <span className={`admin-pill admin-pill-${row.difficulty ?? 'none'}`}>

@@ -186,8 +186,8 @@ function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinis
   })
 
   let earthRadius = devFastFinish
-    ? Math.max(30, Math.floor(canvasWidth * 0.09))
-    : Math.max(22, Math.floor(canvasWidth * 0.065))
+    ? Math.max(50, Math.floor(canvasWidth * 0.22))
+    : Math.max(48, Math.floor(canvasWidth * 0.2))
   earthRadius = Math.round(earthRadius * radiusScale)
   const earthX = devFastFinish
     ? canvasWidth + Math.max(110, Math.floor(canvasWidth * 0.22))

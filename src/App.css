@@ -935,6 +935,35 @@
   white-space: nowrap;
 }
 
+.game-score-block {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.8rem;
+  z-index: 2;
+  text-align: right;
+  pointer-events: none;
+  padding: 0.2rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(8, 10, 24, 0.56);
+  border: 1px solid rgba(230, 255, 216, 0.34);
+}
+
+.game-score-block .game-score {
+  position: static;
+  margin: 0;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.game-score-block .game-high-score {
+  margin: 0.15rem 0 0;
+  font-size: clamp(0.65rem, 0.95vw, 0.82rem);
+  opacity: 0.9;
+  color: #c8e6b8;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+}
+
 .game-score {
   position: absolute;
   top: 0.45rem;
@@ -1362,12 +1391,17 @@
     max-width: 36vw;
   }
 
-  .game-score {
+  .game-score-block {
     top: calc(env(safe-area-inset-top, 0px) + 0.56rem);
     right: 0.7rem;
-    left: auto;
-    transform: none;
+  }
+
+  .game-score-block .game-score {
     font-size: clamp(0.75rem, 2.6vw, 0.92rem);
+  }
+
+  .game-score-block .game-high-score {
+    font-size: clamp(0.68rem, 2.2vw, 0.8rem);
   }
 
   .game-controls-hint {

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { gsap } from 'gsap'
 import RSVPForm from '../components/RSVPForm'
 import LeaderboardModal from '../components/LeaderboardModal'
@@ -79,28 +79,23 @@ export default function EndScreen({ onPlayAgain, onBackToMenu }) {
     }
   }
 
-  useEffect(() => {
-    let cancelled = false
-    const loadLeaderboard = async () => {
-      setLeaderboardLoading(true)
-      setLeaderboardError('')
-      try {
-        const rows = await fetchLeaderboard(50)
-        if (!cancelled) setLeaderboardRows(rows)
-      } catch (err) {
-        if (!cancelled) {
-          setLeaderboardRows([])
-          setLeaderboardError(err?.message ?? 'Nu am putut incarca leaderboard-ul.')
-        }
-      } finally {
-        if (!cancelled) setLeaderboardLoading(false)
-      }
-    }
-    loadLeaderboard()
-    return () => {
-      cancelled = true
+  const loadLeaderboard = useCallback(async () => {
+    setLeaderboardLoading(true)
+    setLeaderboardError('')
+    try {
+      const rows = await fetchLeaderboard(50)
+      setLeaderboardRows(rows)
+    } catch (err) {
+      setLeaderboardRows([])
+      setLeaderboardError(err?.message ?? 'Nu am putut incarca leaderboard-ul.')
+    } finally {
+      setLeaderboardLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (leaderboardOpen) loadLeaderboard()
+  }, [leaderboardOpen, loadLeaderboard])
 
   useEffect(() => {
     let cancelled = false

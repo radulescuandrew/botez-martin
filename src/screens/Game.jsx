@@ -125,6 +125,10 @@ export default function Game({
   }, [loadLeaderboard])
 
   useEffect(() => {
+    if (leaderboardOpen) loadLeaderboard()
+  }, [leaderboardOpen, loadLeaderboard])
+
+  useEffect(() => {
     const media = window.matchMedia('(max-width: 900px), (pointer: coarse)')
     const handleChange = () => setIsMobile(media.matches)
     handleChange()
@@ -597,6 +601,30 @@ export default function Game({
               ctx.arc(px, planet.y, planet.radius, 0, Math.PI * 2)
               ctx.fill()
             }
+            // "Home" label + arrow when earth is visible or near
+            if (px > -planet.radius - 30 && px < logicalWidth + planet.radius + 30) {
+              const labelY = planet.y - planet.radius - 22
+              ctx.save()
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+              ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'
+              ctx.lineWidth = 2
+              ctx.font = 'bold 14px system-ui, sans-serif'
+              ctx.textAlign = 'center'
+              const homeText = 'Home'
+              ctx.strokeText(homeText, px, labelY)
+              ctx.fillText(homeText, px, labelY)
+              // Arrow pointing down toward earth
+              const arrowY = labelY + 10
+              ctx.fillStyle = 'rgba(255, 255, 200, 0.95)'
+              ctx.beginPath()
+              ctx.moveTo(px, arrowY + 8)
+              ctx.lineTo(px - 6, arrowY - 4)
+              ctx.lineTo(px + 6, arrowY - 4)
+              ctx.closePath()
+              ctx.stroke()
+              ctx.fill()
+              ctx.restore()
+            }
             return
           }
 
@@ -686,7 +714,10 @@ export default function Game({
       )}
       <p className="game-attempts">Incercari: {attempts}</p>
       {username && <p className="game-username">{username}</p>}
-      <p className="game-score">Scor: {score}</p>
+      <div className="game-score-block">
+        <p className="game-score">Scor: {score}</p>
+        <p className="game-high-score">Best: {highScore}</p>
+      </div>
       <p className={`game-controls-hint ${scrollX > 0 ? 'hidden' : ''}`}>
         Tap or press space to start and fly
       </p>
