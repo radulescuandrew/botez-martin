@@ -2,6 +2,16 @@ import { useState, useEffect, useMemo } from 'react'
 import TimboBackground from '../components/TimboBackground'
 import ScreenMenu from '../components/ScreenMenu'
 
+const DISCLAIMER_MODAL_CONTENT = `In primul rand ma bucur de entuziasmul crescut pentru joc. Mi-a dat de lucru toata seara sa fixez diferite probleme.
+
+In al 2-lea rand, am prieteni destepti care s-au pus sa verifice cat de securizata e aplicatia. Uite ca nu e deloc.
+
+Intre timp s-au tot adaugat scoruri fake si am decis sa imbunatatesc un pic situatia si a trebuit sa resetez scorurile pentru fairness. Am imbunatatit si leaderboard, avem timp parcurs, timp total, etc.
+
+Sorry pentru cei care au ajuns la scorurile mari pe bune. You can do it one more time. 
+
+Let the best one win!`
+
 const KID_SPRITES = [
   '/sprites/boy_sprites_2/Jump%20(2).png',
   '/sprites/boy_sprites_2/Jump%20(3).png',
@@ -9,6 +19,7 @@ const KID_SPRITES = [
 
 export default function DifficultySelect({ initialDifficulty = 'medium', onSelect, onSkipToDetails, onBackToMenu, scoresByDifficulty = {} }) {
   const [kidFrame, setKidFrame] = useState(0)
+  const [disclaimerModalOpen, setDisclaimerModalOpen] = useState(false)
   const scoreEasy = scoresByDifficulty.easy ?? null
   const scoreMedium = scoresByDifficulty.medium ?? null
   const scoreNightmare = scoresByDifficulty.nightmare ?? null
@@ -50,7 +61,45 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
         <p className="difficulty-ps">
           P.S: Nivelul si scorul sunt salvate si vor fi folosite pentru public shaming.
         </p>
+        <p className="difficulty-disclaimer">
+          Scorurile au fost resetate din cauza incercarilor repetate si reusite de &quot;hacking&quot;.{' '}
+          <button
+            type="button"
+            className="difficulty-disclaimer-link"
+            onClick={() => setDisclaimerModalOpen(true)}
+          >
+            Citeste mai mult
+          </button>
+        </p>
       </section>
+
+      {disclaimerModalOpen && (
+        <div
+          className="disclaimer-modal-overlay"
+          onClick={() => setDisclaimerModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="disclaimer-modal-title"
+        >
+          <div className="disclaimer-modal-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="disclaimer-modal-header">
+              <h2 id="disclaimer-modal-title" className="disclaimer-modal-title">Citeste mai mult</h2>
+              <button
+                type="button"
+                className="disclaimer-modal-close"
+                onClick={() => setDisclaimerModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="disclaimer-modal-body">
+              {DISCLAIMER_MODAL_CONTENT.split('\n\n').map((para, i) => (
+                <p key={i}>{para}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="difficulty-section difficulty-section-cards">
       <div className="difficulty-grid">

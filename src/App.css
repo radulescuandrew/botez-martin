@@ -408,6 +408,39 @@
   line-height: 1.4;
 }
 
+.difficulty-disclaimer {
+  margin: 0.65rem 0 0;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+  max-width: 520px;
+  color: #ff6b6b;
+  background: rgba(220, 38, 38, 0.18);
+  border: 1px solid rgba(248, 113, 113, 0.6);
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(220, 38, 38, 0.2);
+}
+
+.difficulty-disclaimer-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 0.15rem;
+  color: #ffb3b3;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.difficulty-disclaimer-link:hover {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+}
+
 .difficulty-grid {
   width: min(960px, 96vw);
   display: grid;
@@ -1961,6 +1994,67 @@
   font-size: 1rem;
   padding: 0.5rem 0.7rem;
   cursor: pointer;
+}
+
+/* Disclaimer "Citeste mai mult" modal */
+.disclaimer-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(5, 7, 15, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.disclaimer-modal-panel {
+  width: min(520px, 94vw);
+  max-height: 85vh;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 14px;
+  background: rgba(12, 14, 28, 0.97);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.disclaimer-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.disclaimer-modal-title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.disclaimer-modal-close {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 1rem;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
+}
+
+.disclaimer-modal-body {
+  padding: 1.2rem 1rem;
+  overflow-y: auto;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.disclaimer-modal-body p {
+  margin: 0 0 1rem;
+}
+
+.disclaimer-modal-body p:last-child {
+  margin-bottom: 0;
 }
 
 .leaderboard-modal-state {
