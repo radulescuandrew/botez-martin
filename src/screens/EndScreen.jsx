@@ -40,7 +40,7 @@ export default function EndScreen({ onPlayAgain, onBackToMenu, scoreSyncPending 
       if (isSupabaseEnabled() && supabase) {
         const invite = getStoredInvite()
         if (!invite?.inviteToken) {
-          throw new Error('Acceseaza linkul primit pentru a raspunde.')
+          throw new Error('A aparut o problema! 😭 Mai intra odata pe link si completeaza din nou. Daca nu merge, da-mi un semn')
         }
         const { error } = await supabase.rpc('submit_rsvp_by_invite_token', {
           p_token: invite.inviteToken,
