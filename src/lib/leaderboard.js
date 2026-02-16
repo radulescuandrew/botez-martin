@@ -15,7 +15,7 @@ function pickBestDifficulty(row) {
   return row.difficulty ?? 'medium'
 }
 
-/** Fetches combined leaderboard (auth users + invite users). No session required. */
+/** Fetches leaderboard (invitee progress only). No session required. */
 export async function fetchLeaderboard(limit = 50) {
   if (!isSupabaseEnabled() || !supabase) return []
   const { data, error } = await supabase.rpc('get_leaderboard', { p_limit: limit })

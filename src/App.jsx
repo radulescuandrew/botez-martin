@@ -5,10 +5,14 @@ import Landing from './screens/Landing'
 import DifficultySelect from './screens/DifficultySelect'
 import Game from './screens/Game'
 import EndScreen from './screens/EndScreen'
-import { supabase, isSupabaseEnabled, getSupabaseSession, ensureSupabaseSession } from './lib/supabase'
+import ChatModal from './components/ChatModal'
+import ChatButton from './components/ChatButton'
+import { supabase, isSupabaseEnabled } from './lib/supabase'
+import { fetchChatMessages, sendChatMessage } from './lib/chat'
 import './App.css'
 
 const ATTEMPTS_KEY = 'martins_baptism_attempts'
+const CHAT_LAST_READ_KEY = 'martins_baptism_chat_last_read_at'
 const LAST_SCORE_KEY = 'martins_last_score'
 const HIGH_SCORE_KEY = 'martins_high_score'
 const USERNAME_KEY = 'martins_baptism_username'
@@ -71,6 +75,24 @@ function readDifficulty() {
 
 function readGameCompleted() {
   return localStorage.getItem(GAME_COMPLETED_KEY) === '1'
+}
+
+function readChatLastReadAt() {
+  try {
+    const raw = localStorage.getItem(CHAT_LAST_READ_KEY)
+    return raw && /^\d{4}-\d{2}-\d{2}T/.test(raw) ? raw : null
+  } catch {
+    return null
+  }
+}
+
+function setChatLastReadAt(isoString) {
+  try {
+    if (isoString) localStorage.setItem(CHAT_LAST_READ_KEY, isoString)
+    else localStorage.removeItem(CHAT_LAST_READ_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 function readScoresByDifficulty() {
@@ -219,6 +241,20 @@ export default function App() {
     return null
   })
 
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatError, setChatError] = useState('')
+  const [chatSending, setChatSending] = useState(false)
+  const [chatLastReadAt, setChatLastReadAtState] = useState(readChatLastReadAt)
+
+  const chatPollTimerRef = useRef(null)
+  const chatClosedPollTimerRef = useRef(null)
+
+  const chatUnreadCount = chatMessages.filter(
+    (m) => !chatLastReadAt || (m.created_at && new Date(m.created_at) > new Date(chatLastReadAt))
+  ).length
+
   const gameRef = useRef(null)
   const endRef = useRef(null)
   const bgAudioRef = useRef(null)
@@ -247,30 +283,6 @@ export default function App() {
     }
   }, [location.state, navigate])
 
-  const hydrateProgressFromSession = useCallback(
-    async (session) => {
-      if (!supabase || !session?.user?.id) return
-      setProgressLoaded(true)
-      const { data: row } = await supabase.from('user_progress').select('*').eq('id', session.user.id).maybeSingle()
-      if (!row) return
-      const rowUsername = row.username != null ? String(row.username).trim() : ''
-      const rowIntroSeen = typeof row.intro_seen === 'boolean' ? row.intro_seen : false
-      setAttempts((prev) => (Number.isFinite(row.attempts) && row.attempts >= 0 ? row.attempts : prev))
-      setUsername((prev) => (rowUsername !== '' ? rowUsername : prev))
-      setHasSeenIntro((prev) => (rowIntroSeen || prev))
-      setDifficulty((prev) => (row.difficulty === 'easy' || row.difficulty === 'medium' || row.difficulty === 'nightmare' ? row.difficulty : prev))
-      if (Number.isFinite(row.last_score) && row.last_score >= 0) setLastScore(row.last_score)
-      if (Number.isFinite(row.high_score) && row.high_score >= 0) setHighScore(row.high_score)
-      if (Number.isFinite(row.best_score_easy) && row.best_score_easy > 0) setBestScoreEasy(row.best_score_easy)
-      if (Number.isFinite(row.best_score_medium) && row.best_score_medium > 0) setBestScoreMedium(row.best_score_medium)
-      if (Number.isFinite(row.best_score_nightmare) && row.best_score_nightmare > 0) setBestScoreNightmare(row.best_score_nightmare)
-      if (rowIntroSeen && rowUsername) {
-        setScreen((current) => (current === 'landing' ? 'difficulty' : current))
-      }
-    },
-    [],
-  )
-
   const hydrateProgressFromInviteToken = useCallback(async (token) => {
     if (!supabase || !token) return
     setProgressLoaded(true)
@@ -296,39 +308,12 @@ export default function App() {
     }
   }, [])
 
-  const hydrateGameCompletionFromSession = useCallback(async (session) => {
-    if (!supabase || !session?.user?.id) return
-    const { data, error } = await supabase
-      .from('user_game_state')
-      .select('completed_game')
-      .eq('id', session.user.id)
-      .maybeSingle()
-    if (error) {
-      console.warn('Supabase game completion:', error.message)
-      return
-    }
-    if (data?.completed_game) {
-      setGameCompleted(true)
-      setScreen('end')
-    }
-  }, [])
-
   const markGameCompletedToSupabase = useCallback(async () => {
     if (!useSupabaseProgress || !supabase) return
     const invite = getStoredInvite()
-    if (invite?.inviteToken) {
-      const { error } = await supabase.rpc('mark_game_completed_by_invite_token', { p_token: invite.inviteToken })
-      if (error) console.warn('Supabase mark_game_completed_by_invite_token:', error.message)
-      return
-    }
-    let session = await getSupabaseSession()
-    if (!session?.user?.id) session = await ensureSupabaseSession()
-    if (!session?.user?.id) {
-      console.warn('Supabase mark_game_completed: no session')
-      return
-    }
-    const { error } = await supabase.rpc('mark_game_completed')
-    if (error) console.warn('Supabase mark_game_completed:', error.message)
+    if (!invite?.inviteToken) return
+    const { error } = await supabase.rpc('mark_game_completed_by_invite_token', { p_token: invite.inviteToken })
+    if (error) console.warn('Supabase mark_game_completed_by_invite_token:', error.message)
   }, [useSupabaseProgress])
 
   useEffect(() => {
@@ -342,51 +327,20 @@ export default function App() {
         await hydrateProgressFromInviteToken(invite.inviteToken)
         return
       }
-      const session = await ensureSupabaseSession()
-      if (cancelled) return
-      if (!session?.user?.id) {
-        setAuthFailed(true)
-        return
-      }
-      setAuthFailed(false)
-      await hydrateProgressFromSession(session)
-      await hydrateGameCompletionFromSession(session)
+      setProgressLoaded(true)
+      setAuthFailed(true)
     }
 
     boot()
+    return () => { cancelled = true }
+  }, [useSupabaseProgress, hydrateProgressFromInviteToken])
 
-    if (invite?.inviteToken) {
-      return () => { cancelled = true }
-    }
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (cancelled) return
-      if (!session?.user?.id) return
-      setAuthFailed(false)
-      setTimeout(() => {
-        if (cancelled) return
-        hydrateProgressFromSession(session).catch((err) => {
-          console.warn('Supabase progress hydration:', err?.message)
-        })
-        hydrateGameCompletionFromSession(session).catch((err) => {
-          console.warn('Supabase game completion hydration:', err?.message)
-        })
-      }, 0)
-    })
-
-    return () => {
-      cancelled = true
-      subscription?.unsubscribe?.()
-    }
-  }, [useSupabaseProgress, hydrateProgressFromSession, hydrateProgressFromInviteToken, hydrateGameCompletionFromSession])
-
-  // Progress is sent on every game end (win or failure).
+  // Progress is sent on every game end (win or failure). Invite-only: no auth path.
   const syncProgressToSupabase = useCallback(
     async (payload = null) => {
       if (!useSupabaseProgress || !supabase) return
       const invite = getStoredInvite()
+      if (!invite?.inviteToken) return
       const p = progressRef.current
       const rpcPayload = {
         p_attempts: payload?.attempts ?? p.attempts,
@@ -399,22 +353,11 @@ export default function App() {
         p_best_score_medium: payload?.bestScoreMedium ?? bestScoreMedium ?? null,
         p_best_score_nightmare: payload?.bestScoreNightmare ?? bestScoreNightmare ?? null,
       }
-      if (invite?.inviteToken) {
-        const { error } = await supabase.rpc('submit_progress_by_invite_token', {
-          p_token: invite.inviteToken,
-          ...rpcPayload,
-        })
-        if (error) console.warn('Supabase submit_progress_by_invite_token:', error.message)
-        return
-      }
-      let session = await getSupabaseSession()
-      if (!session?.user?.id) session = await ensureSupabaseSession()
-      if (!session?.user?.id) {
-        console.warn('Supabase submit_progress: no session, progress not saved')
-        return
-      }
-      const { error } = await supabase.rpc('submit_progress', rpcPayload)
-      if (error) console.warn('Supabase submit_progress:', error.message)
+      const { error } = await supabase.rpc('submit_progress_by_invite_token', {
+        p_token: invite.inviteToken,
+        ...rpcPayload,
+      })
+      if (error) console.warn('Supabase submit_progress_by_invite_token:', error.message)
     },
     [useSupabaseProgress, lastScore, highScore, bestScoreEasy, bestScoreMedium, bestScoreNightmare],
   )
@@ -500,6 +443,88 @@ export default function App() {
   const playAgainFromEnd = () => {
     setScreen('difficulty')
   }
+
+  const loadChatMessages = useCallback(async () => {
+    if (!isSupabaseEnabled()) return
+    setChatLoading(true)
+    setChatError('')
+    try {
+      const rows = await fetchChatMessages(100, null)
+      setChatMessages(rows)
+    } catch (err) {
+      setChatError(err?.message ?? 'Nu am putut incarca mesajele.')
+      setChatMessages([])
+    } finally {
+      setChatLoading(false)
+    }
+  }, [])
+
+  const handleSendChatMessage = useCallback(
+    async (body) => {
+      const name = (username || '').trim() || 'Invitat'
+      if (!body?.trim() || chatSending) return
+      setChatSending(true)
+      setChatError('')
+      try {
+        await sendChatMessage(name, body.trim())
+        await loadChatMessages()
+      } catch (err) {
+        setChatError(err?.message ?? 'Nu am putut trimite mesajul.')
+      } finally {
+        setChatSending(false)
+      }
+    },
+    [username, chatSending, loadChatMessages]
+  )
+
+  const handleChatClose = useCallback(() => {
+    setChatOpen(false)
+    const newest = chatMessages.reduce((best, m) => {
+      if (!m.created_at) return best
+      const t = new Date(m.created_at).getTime()
+      return t > (best ? new Date(best).getTime() : 0) ? m.created_at : best
+    }, null)
+    if (newest) {
+      setChatLastReadAtState(newest)
+      setChatLastReadAt(newest)
+    }
+  }, [chatMessages])
+
+  useEffect(() => {
+    if (chatOpen) {
+      loadChatMessages()
+      chatPollTimerRef.current = window.setInterval(() => loadChatMessages(), 4000)
+      return () => {
+        if (chatPollTimerRef.current) {
+          window.clearInterval(chatPollTimerRef.current)
+          chatPollTimerRef.current = null
+        }
+      }
+    }
+  }, [chatOpen, loadChatMessages])
+
+  useEffect(() => {
+    if (isSupabaseEnabled()) loadChatMessages()
+  }, [loadChatMessages])
+
+  useEffect(() => {
+    if (!chatOpen && isSupabaseEnabled()) {
+      chatClosedPollTimerRef.current = window.setInterval(() => loadChatMessages(), 30000)
+      return () => {
+        if (chatClosedPollTimerRef.current) {
+          window.clearInterval(chatClosedPollTimerRef.current)
+          chatClosedPollTimerRef.current = null
+        }
+      }
+    }
+  }, [chatOpen, loadChatMessages])
+
+  useEffect(() => {
+    return () => {
+      if (chatPollTimerRef.current) window.clearInterval(chatPollTimerRef.current)
+      if (chatClosedPollTimerRef.current) window.clearInterval(chatClosedPollTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!useSupabaseProgress) localStorage.setItem(ATTEMPTS_KEY, String(attempts))
@@ -596,12 +621,9 @@ export default function App() {
   if (useSupabaseProgress && authFailed) {
     return (
       <main className="app">
-        <div className="app-loading app-auth-error" role="alert">
-          <p className="app-auth-error-title">Nu ne putem conecta</p>
-          <p className="app-auth-error-text">Verifica conexiunea la internet si reincarca pagina.</p>
-          <button type="button" className="app-auth-error-btn" onClick={() => window.location.reload()}>
-            Reincarca
-          </button>
+        <div className="app-loading app-unknown-user" role="alert">
+          <p className="app-auth-error-title">Nu stim cine esti</p>
+          <p className="app-auth-error-text">Acceseaza linkul primit pentru a intra.</p>
         </div>
       </main>
     )
@@ -714,6 +736,18 @@ export default function App() {
           )}
         </>
       )}
+          <ChatButton onClick={() => setChatOpen(true)} unreadCount={chatOpen ? 0 : chatUnreadCount} />
+          <ChatModal
+            open={chatOpen}
+            onClose={handleChatClose}
+            currentUsername={username}
+            messages={chatMessages}
+            loading={chatLoading && chatMessages.length === 0}
+            error={chatError}
+            onSendMessage={handleSendChatMessage}
+            onMarkAsRead={handleChatClose}
+            sending={chatSending}
+          />
         </>
       )}
     </main>

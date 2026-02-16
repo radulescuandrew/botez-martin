@@ -3,7 +3,7 @@ import { gsap } from 'gsap'
 import RSVPForm from '../components/RSVPForm'
 import LeaderboardModal from '../components/LeaderboardModal'
 import ScreenMenu from '../components/ScreenMenu'
-import { supabase, isSupabaseEnabled, ensureSupabaseSession } from '../lib/supabase'
+import { supabase, isSupabaseEnabled } from '../lib/supabase'
 import { fetchLeaderboard } from '../lib/leaderboard'
 
 const INVITE_STORAGE_KEY = 'martins_baptism_invite'
@@ -39,35 +39,20 @@ export default function EndScreen({ onPlayAgain, onBackToMenu }) {
     try {
       if (isSupabaseEnabled() && supabase) {
         const invite = getStoredInvite()
-        if (invite?.inviteToken) {
-          const { error } = await supabase.rpc('submit_rsvp_by_invite_token', {
-            p_token: invite.inviteToken,
-            p_church_attending: data.churchAttending,
-            p_party_attending: data.partyAttending,
-            p_plus_one: data.plusOne,
-            p_plus_one_count: data.plusOneCount,
-            p_plus_one_names: data.plusOneNames ?? [],
-            p_dietary_restrictions: data.dietaryRestrictions,
-            p_dietary_restrictions_note: data.dietaryRestrictionsNote ?? '',
-          })
-          if (error) throw error
-        } else {
-          const session = await ensureSupabaseSession()
-          if (!session?.user?.id) {
-            throw new Error('Nu exista sesiune Supabase.')
-          }
-          const { error } = await supabase.rpc('submit_rsvp', {
-            p_invite_id: invite?.inviteId ?? null,
-            p_church_attending: data.churchAttending,
-            p_party_attending: data.partyAttending,
-            p_plus_one: data.plusOne,
-            p_plus_one_count: data.plusOneCount,
-            p_plus_one_names: data.plusOneNames,
-            p_dietary_restrictions: data.dietaryRestrictions,
-            p_dietary_restrictions_note: data.dietaryRestrictionsNote,
-          })
-          if (error) throw error
+        if (!invite?.inviteToken) {
+          throw new Error('Acceseaza linkul primit pentru a raspunde.')
         }
+        const { error } = await supabase.rpc('submit_rsvp_by_invite_token', {
+          p_token: invite.inviteToken,
+          p_church_attending: data.churchAttending,
+          p_party_attending: data.partyAttending,
+          p_plus_one: data.plusOne,
+          p_plus_one_count: data.plusOneCount,
+          p_plus_one_names: data.plusOneNames ?? [],
+          p_dietary_restrictions: data.dietaryRestrictions,
+          p_dietary_restrictions_note: data.dietaryRestrictionsNote ?? '',
+        })
+        if (error) throw error
       }
       setRsvpData(data)
       setSubmitted(true)
@@ -106,49 +91,25 @@ export default function EndScreen({ onPlayAgain, onBackToMenu }) {
       }
       try {
         const invite = getStoredInvite()
-        if (invite?.inviteToken) {
-          const { data: rows, error } = await supabase.rpc('get_rsvp_by_invite_token', {
-            p_token: invite.inviteToken,
+        if (!invite?.inviteToken) {
+          if (!cancelled) setCheckingExisting(false)
+          return
+        }
+        const { data: rows, error } = await supabase.rpc('get_rsvp_by_invite_token', {
+          p_token: invite.inviteToken,
+        })
+        if (!cancelled && !error && rows?.length > 0) {
+          const row = rows[0]
+          setRsvpData({
+            churchAttending: row.church_attending,
+            partyAttending: row.party_attending,
+            plusOne: row.plus_one,
+            plusOneCount: row.plus_one_count ?? 0,
+            plusOneNames: row.plus_one_names ?? [],
+            dietaryRestrictions: row.dietary_restrictions ?? false,
+            dietaryRestrictionsNote: row.dietary_restrictions_note ?? '',
           })
-          if (!cancelled && !error && rows?.length > 0) {
-            const row = rows[0]
-            setRsvpData({
-              churchAttending: row.church_attending,
-              partyAttending: row.party_attending,
-              plusOne: row.plus_one,
-              plusOneCount: row.plus_one_count ?? 0,
-              plusOneNames: row.plus_one_names ?? [],
-              dietaryRestrictions: row.dietary_restrictions ?? false,
-              dietaryRestrictionsNote: row.dietary_restrictions_note ?? '',
-            })
-            setSubmitted(true)
-          }
-        } else {
-          const session = await ensureSupabaseSession()
-          if (!session?.user?.id) {
-            if (!cancelled) setCheckingExisting(false)
-            return
-          }
-          const { data, error } = await supabase
-            .from('invite_rsvps')
-            .select('church_attending, party_attending, plus_one, plus_one_count, plus_one_names, dietary_restrictions, dietary_restrictions_note')
-            .eq('user_id', session.user.id)
-            .maybeSingle()
-          if (error) {
-            console.warn('Supabase load RSVP:', error.message)
-          }
-          if (!cancelled && data) {
-            setRsvpData({
-              churchAttending: data.church_attending,
-              partyAttending: data.party_attending,
-              plusOne: data.plus_one,
-              plusOneCount: data.plus_one_count,
-              plusOneNames: data.plus_one_names ?? [],
-              dietaryRestrictions: data.dietary_restrictions,
-              dietaryRestrictionsNote: data.dietary_restrictions_note ?? '',
-            })
-            setSubmitted(true)
-          }
+          setSubmitted(true)
         }
       } finally {
         if (!cancelled) setCheckingExisting(false)
