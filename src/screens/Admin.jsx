@@ -56,6 +56,9 @@ export default function Admin() {
   const [addVinChurch, setAddVinChurch] = useState(true)
   const [addVinError, setAddVinError] = useState('')
   const [addVinSaving, setAddVinSaving] = useState(false)
+  const [editingPlusOneRowId, setEditingPlusOneRowId] = useState(null)
+  const [editingPlusOneValue, setEditingPlusOneValue] = useState('')
+  const [savingPlusOneRowId, setSavingPlusOneRowId] = useState(null)
 
   const isAdmin = profile?.role === 'admin'
 
@@ -326,6 +329,34 @@ export default function Admin() {
     setMerging(false)
     closeMergeModal()
     await loadRsvps()
+  }
+
+  const startEditPlusOne = (row) => {
+    setEditingPlusOneRowId(row.id)
+    setEditingPlusOneValue(Array.isArray(row.plus_one_names) && row.plus_one_names.length > 0 ? row.plus_one_names.join(', ') : '')
+  }
+
+  const cancelEditPlusOne = () => {
+    setEditingPlusOneRowId(null)
+    setEditingPlusOneValue('')
+  }
+
+  const savePlusOne = async (rowId) => {
+    if (!supabase || !isAdmin) return
+    const names = editingPlusOneValue.split(',').map((s) => s.trim()).filter(Boolean)
+    setSavingPlusOneRowId(rowId)
+    const { error } = await supabase
+      .from('invite_rsvps')
+      .update({
+        plus_one: names.length > 0,
+        plus_one_count: names.length,
+        plus_one_names: names,
+      })
+      .eq('id', rowId)
+    setSavingPlusOneRowId(null)
+    setEditingPlusOneRowId(null)
+    setEditingPlusOneValue('')
+    if (!error) await loadRsvps()
   }
 
   const handleAddVin = async (e) => {
@@ -739,7 +770,31 @@ export default function Admin() {
                             <td title="Biserica">{row.church_attending ? '✅' : '❌'}</td>
                             <td title="Petrecere">{row.party_attending ? '✅' : '❌'}</td>
                             <td>{row.plus_one ? row.plus_one_count : 0}</td>
-                            <td>{Array.isArray(row.plus_one_names) && row.plus_one_names.length > 0 ? row.plus_one_names.join(', ') : '—'}</td>
+                            <td className="admin-plus-one-cell">
+                              {editingPlusOneRowId === row.id ? (
+                                <div className="admin-plus-one-edit">
+                                  <input
+                                    type="text"
+                                    className="admin-input admin-plus-one-input"
+                                    value={editingPlusOneValue}
+                                    onChange={(e) => setEditingPlusOneValue(e.target.value)}
+                                    placeholder="Nume +1 (separate cu virgula)"
+                                    autoFocus
+                                  />
+                                  <div className="admin-plus-one-edit-actions">
+                                    <button type="button" className="admin-link-btn" onClick={cancelEditPlusOne}>Anuleaza</button>
+                                    <button type="button" className="admin-btn" onClick={() => savePlusOne(row.id)} disabled={savingPlusOneRowId === row.id}>
+                                      {savingPlusOneRowId === row.id ? 'Se salveaza...' : 'Salveaza'}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <span>{Array.isArray(row.plus_one_names) && row.plus_one_names.length > 0 ? row.plus_one_names.join(', ') : '—'}</span>
+                                  <button type="button" className="admin-link-btn admin-edit-plus-one-btn" onClick={() => startEditPlusOne(row)} title="Editeaza nume +1">✏️</button>
+                                </>
+                              )}
+                            </td>
                             <td>{row.dietary_restrictions ? (row.dietary_restrictions_note || 'Da') : 'Nu'}</td>
                             <td>
                               <div className="admin-action-buttons">

@@ -405,6 +405,36 @@
   flex-shrink: 0;
 }
 
+.admin-plus-one-cell {
+  min-width: 120px;
+}
+
+.admin-plus-one-cell > span + .admin-edit-plus-one-btn {
+  margin-left: 6px;
+}
+
+.admin-edit-plus-one-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.admin-plus-one-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-plus-one-input {
+  min-width: 160px;
+  font-size: 13px;
+}
+
+.admin-plus-one-edit-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* Merge modal */
 .admin-modal-backdrop {
   position: fixed;
