@@ -1,7 +1,8 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { gsap } from 'gsap'
 import RSVPForm from '../components/RSVPForm'
 import LeaderboardModal from '../components/LeaderboardModal'
+import ScreenMenu from '../components/ScreenMenu'
 import { supabase, isSupabaseEnabled, ensureSupabaseSession } from '../lib/supabase'
 import { fetchLeaderboard } from '../lib/leaderboard'
 
@@ -18,15 +19,15 @@ function getStoredInvite() {
   }
 }
 
-export default function EndScreen({ onPlayAgain }) {
+export default function EndScreen({ onPlayAgain, onBackToMenu }) {
   const containerRef = useRef(null)
   const thankYouRef = useRef(null)
   const [submitted, setSubmitted] = useState(false)
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false)
   const [rsvpData, setRsvpData] = useState(null)
   const [submitError, setSubmitError] = useState('')
   const [saving, setSaving] = useState(false)
   const [checkingExisting, setCheckingExisting] = useState(true)
-  const [leaderboardOpen, setLeaderboardOpen] = useState(false)
   const [leaderboardRows, setLeaderboardRows] = useState([])
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
   const [leaderboardError, setLeaderboardError] = useState('')
@@ -164,6 +165,15 @@ export default function EndScreen({ onPlayAgain }) {
     }
   }, [])
 
+  const menuActions = useMemo(() => {
+    const a = []
+    if (onBackToMenu) {
+      a.push({ label: 'Back to main menu', onClick: onBackToMenu })
+    }
+    a.push({ label: 'Leaderboard', onClick: () => setLeaderboardOpen(true) })
+    return a
+  }, [onBackToMenu])
+
   useEffect(() => {
     if (submitted && thankYouRef.current) {
       gsap.fromTo(thankYouRef.current, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4 })
@@ -172,6 +182,7 @@ export default function EndScreen({ onPlayAgain }) {
 
   return (
     <div ref={containerRef} className="screen end-screen">
+      {menuActions.length > 0 && <ScreenMenu actions={menuActions} />}
       <div className="end-video-wrap">
         <video
           className="end-video"

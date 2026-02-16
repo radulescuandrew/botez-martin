@@ -9,6 +9,9 @@ import { fetchLeaderboard } from '../lib/leaderboard'
 
 const BASE_CANVAS_WIDTH = 320
 const BASE_CANVAS_HEIGHT = 180
+const PORTRAIT_WIDTH = 225
+const PORTRAIT_HEIGHT = 400
+const PORTRAIT_FIRST_OBSTACLE_OFFSET = 50
 const WIN_LANDED_MS = 3000
 const WIN_TRANSITION_MS = 2200
 const LAST_SCORE_KEY = 'martins_last_score'
@@ -86,6 +89,9 @@ export default function Game({
   const [leaderboardError, setLeaderboardError] = useState('')
   const [retryLocked, setRetryLocked] = useState(false)
   const [retryLockCycle, setRetryLockCycle] = useState(0)
+  const [speedUpNotificationVisible, setSpeedUpNotificationVisible] = useState(false)
+  const lastSpeedUpThousandsRef = useRef(0)
+  const speedUpNotificationTimerRef = useRef(null)
   const [isMobile, setIsMobile] = useState(() => (
     window.matchMedia('(max-width: 900px), (pointer: coarse)').matches
   ))
@@ -94,8 +100,8 @@ export default function Game({
   const retryLockTimerRef = useRef(null)
   const winVideoRef = useRef(null)
   const [winVideoUnmuted, setWinVideoUnmuted] = useState(false)
-  const logicalWidth = isMobile ? 400 : BASE_CANVAS_WIDTH
-  const logicalHeight = isMobile ? 225 : BASE_CANVAS_HEIGHT
+  const logicalWidth = isMobile ? PORTRAIT_WIDTH : BASE_CANVAS_WIDTH
+  const logicalHeight = isMobile ? PORTRAIT_HEIGHT : BASE_CANVAS_HEIGHT
   const ignoreReachEndRef = useCallback(() => {}, [])
   const difficultyMultiplier = getDifficultyMultiplier(difficulty)
   const topThreeRows = leaderboardRows.slice(0, 3)
@@ -215,34 +221,45 @@ export default function Game({
 
     if (!isMobile) return difficultyLevel
     const yScale = logicalHeight / BASE_CANVAS_HEIGHT
-    const mobileGroundY = logicalHeight - 14
+    const mobileGroundY = logicalHeight - 24
     const baseRadiusScale = difficultyLevel.planetProfile?.radiusScale ?? 1
+    const scaledGates = difficultyLevel.gates.map((gate) => {
+      const scaledGapHeight = Math.round(gate.gapHeight * yScale)
+      const scaledGapY = Math.round(gate.gapY * yScale)
+      const minGapHeight = Math.max(48, Math.round(logicalHeight * 0.24))
+      const nextGapHeight = Math.min(
+        Math.max(scaledGapHeight + 10, minGapHeight),
+        Math.round(logicalHeight * 0.42)
+      )
+      const maxGapY = Math.max(16, mobileGroundY - nextGapHeight - 8)
+      return {
+        ...gate,
+        width: Math.max(44, Math.round(gate.width * 1.02)),
+        gapHeight: nextGapHeight,
+        gapY: Math.min(Math.max(12, scaledGapY), maxGapY),
+      }
+    })
+    const offsetGates = scaledGates.map((g) => ({ ...g, x: g.x + PORTRAIT_FIRST_OBSTACLE_OFFSET }))
+    let gateIndex = 0
+    const scaledObstacles = difficultyLevel.obstacles.map((ob) => {
+      if (ob.gapY != null && ob.gapHeight != null) {
+        return offsetGates[gateIndex++]
+      }
+      return { ...ob, x: ob.x + PORTRAIT_FIRST_OBSTACLE_OFFSET }
+    })
     return {
       ...difficultyLevel,
+      length: difficultyLevel.length + PORTRAIT_FIRST_OBSTACLE_OFFSET,
       groundY: mobileGroundY,
       scrollSpeed: difficultyLevel.scrollSpeed * 0.82,
       planetProfile: {
         ...difficultyLevel.planetProfile,
         radiusScale: baseRadiusScale * 1.2,
       },
-      gates: difficultyLevel.gates.map((gate) => {
-        const scaledGapHeight = Math.round(gate.gapHeight * yScale)
-        const scaledGapY = Math.round(gate.gapY * yScale)
-        const minGapHeight = Math.max(48, Math.round(logicalHeight * 0.24))
-        const nextGapHeight = Math.min(
-          Math.max(scaledGapHeight + 10, minGapHeight),
-          Math.round(logicalHeight * 0.42)
-        )
-        const maxGapY = Math.max(16, mobileGroundY - nextGapHeight - 8)
-        return {
-          ...gate,
-          width: Math.max(44, Math.round(gate.width * 1.02)),
-          gapHeight: nextGapHeight,
-          gapY: Math.min(Math.max(12, scaledGapY), maxGapY),
-        }
-      }),
+      gates: offsetGates,
+      obstacles: scaledObstacles,
     }
-  }, [isMobile, logicalHeight, difficulty])
+  }, [isMobile, logicalHeight, logicalWidth, difficulty])
 
   useEffect(() => {
     const base = BOY_SPRITES_BASE
@@ -278,6 +295,17 @@ export default function Game({
     ? { top: 8, bottom: 9, left: 4, right: 12 }
     : { top: 5, bottom: 5, left: 3, right: 9 }
 
+  const getScrollSpeedMultiplier = useCallback(
+    (scroll) => {
+      if (difficulty !== 'nightmare') return 1
+      const base = scrollToScoreBase(scroll)
+      const displayScore = base * getDifficultyMultiplier('nightmare')
+      const thousands = Math.floor(displayScore / 1000)
+      return 1 + thousands * 0.015
+    },
+    [difficulty]
+  )
+
   const {
     scrollX,
     reset,
@@ -293,6 +321,7 @@ export default function Game({
     kidHeight: isMobile ? 34 : 22,
     kidScreenRatio: isMobile ? 0.18 : 0.5,
     kidCollisionInsets,
+    getScrollSpeedMultiplier,
   })
   const baseScore = scrollToScoreBase(scrollX) + (winPhase !== 'none' ? WIN_BONUS : 0)
   const score = baseScore * difficultyMultiplier
@@ -361,8 +390,32 @@ export default function Game({
     return () => {
       if (winTimerRef.current) window.clearTimeout(winTimerRef.current)
       if (retryLockTimerRef.current) window.clearTimeout(retryLockTimerRef.current)
+      if (speedUpNotificationTimerRef.current) window.clearTimeout(speedUpNotificationTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (difficulty !== 'nightmare' || gameOver || winPhase !== 'none') return
+    if (scrollX <= 0) {
+      lastSpeedUpThousandsRef.current = 0
+      return
+    }
+    const displayScore = scrollToScoreBase(scrollX) * difficultyMultiplier
+    const currentThousands = Math.floor(displayScore / 1000)
+    if (currentThousands >= 1 && currentThousands > lastSpeedUpThousandsRef.current) {
+      lastSpeedUpThousandsRef.current = currentThousands
+      setSpeedUpNotificationVisible(true)
+      if (speedUpNotificationTimerRef.current) window.clearTimeout(speedUpNotificationTimerRef.current)
+      speedUpNotificationTimerRef.current = window.setTimeout(() => {
+        setSpeedUpNotificationVisible(false)
+        speedUpNotificationTimerRef.current = null
+      }, 2500)
+    }
+  }, [scrollX, difficulty, difficultyMultiplier, gameOver, winPhase])
+
+  useEffect(() => {
+    if (gameOver) setSpeedUpNotificationVisible(false)
+  }, [gameOver])
 
   useEffect(() => {
     if (winPhase !== 'video' || !winVideoRef.current) return
@@ -626,6 +679,11 @@ export default function Game({
         <span />
         <span />
       </button>
+      {difficulty === 'nightmare' && speedUpNotificationVisible && (
+        <div className="game-speed-up-notification" role="status" aria-live="polite">
+          Let&apos;s speed up 👿
+        </div>
+      )}
       <p className="game-attempts">Incercari: {attempts}</p>
       {username && <p className="game-username">{username}</p>}
       <p className="game-score">Scor: {score}</p>

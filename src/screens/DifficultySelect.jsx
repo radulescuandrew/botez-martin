@@ -1,16 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import TimboBackground from '../components/TimboBackground'
+import ScreenMenu from '../components/ScreenMenu'
 
 const KID_SPRITES = [
   '/sprites/boy_sprites_2/Jump%20(2).png',
   '/sprites/boy_sprites_2/Jump%20(3).png',
 ]
 
-export default function DifficultySelect({ initialDifficulty = 'medium', onSelect, scoresByDifficulty = {} }) {
+export default function DifficultySelect({ initialDifficulty = 'medium', onSelect, onSkipToDetails, onBackToMenu, scoresByDifficulty = {} }) {
   const [kidFrame, setKidFrame] = useState(0)
   const scoreEasy = scoresByDifficulty.easy ?? null
   const scoreMedium = scoresByDifficulty.medium ?? null
   const scoreNightmare = scoresByDifficulty.nightmare ?? null
+
+  const menuActions = useMemo(() => {
+    const a = []
+    if (onBackToMenu) {
+      a.push({ label: 'Back to main menu', onClick: onBackToMenu })
+    }
+    if (onSkipToDetails) {
+      a.push({ label: 'Nu vreau sa joc, du-ma la detalii', onClick: onSkipToDetails })
+    }
+    return a
+  }, [onBackToMenu, onSkipToDetails])
 
   useEffect(() => {
     const id = setInterval(() => setKidFrame((f) => (f + 1) % 2), 200)
@@ -19,6 +31,7 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
 
   return (
     <div className="screen difficulty-screen">
+      {menuActions.length > 0 && <ScreenMenu actions={menuActions} />}
       <TimboBackground scrollOffset={0} />
       <section className="difficulty-section difficulty-section-kid" aria-hidden>
         <div className="difficulty-kid">
@@ -84,6 +97,15 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
           )}
         </button>
       </div>
+      {onSkipToDetails && (
+        <button
+          type="button"
+          className="difficulty-skip-to-details"
+          onClick={onSkipToDetails}
+        >
+          Nu vreau sa joc, du-ma la detalii
+        </button>
+      )}
       </section>
     </div>
   )

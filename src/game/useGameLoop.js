@@ -217,6 +217,7 @@ export function useGameLoop({
   kidHeight = DEFAULT_KID_HEIGHT,
   kidScreenRatio = 0.5,
   kidCollisionInsets = DEFAULT_COLLISION_INSETS,
+  getScrollSpeedMultiplier,
 }) {
   const { top: inT, bottom: inB, left: inL, right: inR } = kidCollisionInsets
   const devFastFinish = isDevFastFinishEnabled()
@@ -354,7 +355,8 @@ export function useGameLoop({
         return
       }
 
-      scrollRef.current = scr + scrollSpeed * step
+      const speedMult = typeof getScrollSpeedMultiplier === 'function' ? getScrollSpeedMultiplier(scr) : 1
+      scrollRef.current = scr + scrollSpeed * speedMult * step
       const newScroll = scrollRef.current
       setScrollX(newScroll)
 
@@ -441,7 +443,7 @@ export function useGameLoop({
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [level.obstacles, level.gates, level.length, level.planetProfile, canvasWidth, groundY, scrollSpeed, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish])
+  }, [level.obstacles, level.gates, level.length, level.planetProfile, canvasWidth, groundY, scrollSpeed, getScrollSpeedMultiplier, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish])
 
   return {
     kid,

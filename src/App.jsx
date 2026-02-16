@@ -494,6 +494,9 @@ export default function App() {
   const countRetry = () => setAttempts((value) => value + 1)
   const goToLanding = () => setScreen('landing')
   const goToDifficultyMenu = () => setScreen('difficulty')
+  const goToDetails = () => {
+    setScreen('end')
+  }
   const playAgainFromEnd = () => {
     setScreen('game')
   }
@@ -642,19 +645,6 @@ export default function App() {
       )}
       {!isLargeScreen && (
         <>
-      {isMobilePortrait && screen === 'game' && (
-        <div className="rotate-to-landscape-overlay" role="alert" aria-live="polite">
-          <div className="rotate-to-landscape-content">
-            <div className="rotate-to-landscape-icon" aria-hidden>
-              <span className="rotate-phone" />
-            </div>
-            <p className="rotate-to-landscape-title">Roteste telefonul</p>
-            <p className="rotate-to-landscape-text">
-              Pentru a juca, tine telefonul orizontal (landscape). Nu poti continua in portrait.
-            </p>
-          </div>
-        </div>
-      )}
       {screen === 'landing' && (
         <Landing
           onPlay={goToDifficulty}
@@ -667,6 +657,8 @@ export default function App() {
         <DifficultySelect
           initialDifficulty={difficulty}
           onSelect={startGameWithDifficulty}
+          onSkipToDetails={goToDetails}
+          onBackToMenu={goToLanding}
           scoresByDifficulty={
             useSupabaseProgress
               ? { easy: bestScoreEasy, medium: bestScoreMedium, nightmare: bestScoreNightmare }
@@ -705,7 +697,7 @@ export default function App() {
       {screen === 'end' && (
         <>
           <div ref={endRef} className="screen-wrapper">
-            <EndScreen onPlayAgain={playAgainFromEnd} />
+            <EndScreen onPlayAgain={playAgainFromEnd} onBackToMenu={goToLanding} />
           </div>
           {isMobileLandscape && (
             <div className="rotate-to-portrait-overlay" role="alert" aria-live="polite">
