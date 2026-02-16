@@ -1596,15 +1596,18 @@
   width: 100%;
 }
 
-.rsvp-play-again {
+/* Golden "play again" button – higher specificity so it overrides .rsvp-submit */
+.rsvp-actions .rsvp-play-again {
   order: -1;
-  background: linear-gradient(180deg, #f7e08c 0%, #d4a017 50%, #b8860b 100%);
-  color: #1a0f00;
-  border: 2px solid #8b6914;
+  background: linear-gradient(180deg, #f5dc7a 0%, #c9920d 50%, #9a6f09 100%) !important;
+  color: #0d0800 !important;
+  border: 2px solid #6b5008 !important;
   font-weight: 800;
-  font-size: 1.15rem;
-  padding: 0.85rem 1.5rem;
-  box-shadow: 0 4px 14px rgba(184, 134, 11, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+  font-size: 1.2rem;
+  padding: 0.9rem 1.5rem;
+  box-shadow: 0 4px 14px rgba(184, 134, 11, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.02em;
 }
 
 .rsvp-submit {
@@ -1620,9 +1623,11 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
-.rsvp-play-again:hover {
-  background: linear-gradient(180deg, #fce9a8 0%, #e6b82a 50%, #c9960c 100%);
+.rsvp-actions .rsvp-play-again:hover {
+  background: linear-gradient(180deg, #fce9a8 0%, #e0a810 50%, #b8860b 100%) !important;
+  color: #0d0800 !important;
   box-shadow: 0 6px 20px rgba(184, 134, 11, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.45);
 }
 
 .rsvp-submit:disabled,

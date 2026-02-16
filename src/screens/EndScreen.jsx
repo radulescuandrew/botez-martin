@@ -191,7 +191,7 @@ export default function EndScreen({ onPlayAgain, onBackToMenu }) {
       </div>
       <div className="end-content">
         <h1 className="end-title">Te asteptam la botez! ✨</h1>
-        <p className="end-date">2 Mai</p>
+        
         {((!submitted || editingResponse) && !checkingExisting) && (
           <p className="end-subtitle">Completeaza formularul de mai jos ca sa stim cum ne organizam.</p>
         )}
@@ -200,7 +200,7 @@ export default function EndScreen({ onPlayAgain, onBackToMenu }) {
           <div className="rsvp-place-card">
             <div className="rsvp-place-header">
               <p className="rsvp-place-title">⛪ Biserica</p>
-              <p className="rsvp-place-time">Ora 14:00</p>
+              <p className="rsvp-place-time">2 Mai 2026,Ora 14:00</p>
             </div>
             <div className="rsvp-place-body">
               <p className="rsvp-place-name">St. Nicholas Church</p>
@@ -220,7 +220,7 @@ export default function EndScreen({ onPlayAgain, onBackToMenu }) {
           <div className="rsvp-place-card">
             <div className="rsvp-place-header">
               <p className="rsvp-place-title">🎉 Petrecere</p>
-              <p className="rsvp-place-time">Ora 16:00</p>
+              <p className="rsvp-place-time">2 Mai 2026, Ora 16:00</p>
             </div>
             <div className="rsvp-place-body">
               <p className="rsvp-place-name">Pheonix Cernica - Salon By The Pool</p>
