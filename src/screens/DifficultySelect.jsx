@@ -63,7 +63,7 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
             <span className="difficulty-name">Easy</span>
             <span className="difficulty-scor">Scor x1</span>
           </div>
-          <p>Mi-ar fi rusine sa joc la dificultatea asta.</p>
+          <p>Vreau sa ma relaxez, no stress 🤗.</p>
           {scoreEasy != null && (
             <p className="difficulty-card-your-score">Scorul tau: {scoreEasy}</p>
           )}
@@ -77,7 +77,7 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
             <span className="difficulty-name">Medium</span>
             <span className="difficulty-scor">Scor x2</span>
           </div>
-          <p>Ceva mai greu... e acceptabil.</p>
+          <p>Am nevoie de o provocare in viata mea 💪.</p>
           {scoreMedium != null && (
             <p className="difficulty-card-your-score">Scorul tau: {scoreMedium}</p>
           )}
@@ -91,7 +91,7 @@ export default function DifficultySelect({ initialDifficulty = 'medium', onSelec
             <span className="difficulty-name">Nightmare</span>
             <span className="difficulty-scor">Scor x3</span>
           </div>
-          <p>Pentru cei puternici!</p>
+          <p>Ajungi la final? 😈</p>
           {scoreNightmare != null && (
             <p className="difficulty-card-your-score">Scorul tau: {scoreNightmare}</p>
           )}

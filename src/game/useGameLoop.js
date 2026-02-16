@@ -37,7 +37,7 @@ function isDevFastFinishEnabled() {
   return false
 }
 
-function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinish = false, planetProfile = {}) {
+function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinish = false, planetProfile = {}, gameTime = 0) {
   const planets = []
   const source = devFastFinish ? obstacles.slice(0, 5) : obstacles
   const radiusScale = planetProfile.radiusScale ?? 1
@@ -48,11 +48,14 @@ function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinis
     const type = ob.type || 'gate'
 
     if (type === 'top') {
-      // One big obstacle at top — player flies under
       const w = ob.width || 70
       const radius = Math.round(Math.max(28, w * 0.45) * radiusScale)
       const baseX = ob.x + (ob.width || 70) / 2
-      const y = radius + 12 + Math.floor(seededUnit(idx * 5) * 8)
+      let y = radius + 12 + Math.floor(seededUnit(idx * 5) * 8)
+      if (ob.moveY) {
+        const dy = ob.moveY.amplitude * Math.sin(ob.moveY.phase0 + ob.moveY.speed * gameTime)
+        y = clamp(y + dy, radius + 4, groundY - radius - 12)
+      }
       planets.push({
         x: baseX,
         y,
@@ -63,11 +66,14 @@ function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinis
     }
 
     if (type === 'bottom') {
-      // One big obstacle at bottom — player flies over
       const w = ob.width || 70
       const radius = Math.round(Math.max(28, w * 0.45) * radiusScale)
       const baseX = ob.x + (ob.width || 70) / 2
-      const y = groundY - radius - 12 - Math.floor(seededUnit(idx * 9) * 8)
+      let y = groundY - radius - 12 - Math.floor(seededUnit(idx * 9) * 8)
+      if (ob.moveY) {
+        const dy = ob.moveY.amplitude * Math.sin(ob.moveY.phase0 + ob.moveY.speed * gameTime)
+        y = clamp(y + dy, radius + 12, groundY - radius - 4)
+      }
       planets.push({
         x: baseX,
         y,
@@ -78,16 +84,19 @@ function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinis
     }
 
     if (type === 'center') {
-      // One big obstacle in middle — player flies over or under
       const w = ob.width || 64
       const radius = Math.round(Math.max(26, w * 0.4) * radiusScale)
       const baseX = ob.x + (ob.width || 64) / 2
       const centerY = Math.floor(groundY * 0.5)
-      const y = clamp(
+      let y = clamp(
         centerY + Math.floor((seededUnit(idx * 11) - 0.5) * 24),
         radius + 20,
         groundY - radius - 20
       )
+      if (ob.moveY) {
+        const dy = ob.moveY.amplitude * Math.sin(ob.moveY.phase0 + ob.moveY.speed * gameTime)
+        y = clamp(y + dy, radius + 20, groundY - radius - 20)
+      }
       planets.push({
         x: baseX,
         y,
@@ -378,7 +387,7 @@ export function useGameLoop({
           )
           return { ...ob, gapY }
         })
-        planetsData = buildPlanets(resolvedObstacles, groundY, level.length, canvasWidth, devFastFinish, level.planetProfile)
+        planetsData = buildPlanets(resolvedObstacles, groundY, level.length, canvasWidth, devFastFinish, level.planetProfile, gameTime)
       }
 
       if (flapRef?.current) {

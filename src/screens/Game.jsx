@@ -283,7 +283,12 @@ export default function Game({
         }
         nightmareGates.push(gate)
         if (i % 3 === 2) {
-          nightmareObstacles.push({ type: 'top', x: x + Math.floor(spacing * 0.4), width: 64 })
+          nightmareObstacles.push({
+            type: 'top',
+            x: x + Math.floor(spacing * 0.4),
+            width: 64,
+            moveY: { amplitude: 12, speed: 4.5, phase0: i * 1.2 },
+          })
         } else {
           nightmareObstacles.push(gate)
         }
@@ -298,15 +303,19 @@ export default function Game({
       const blackHoles = []
       const firstBlackHoleAt = 400
       const blackHoleSpacing = 2200
+      let bhIndex = 0
       for (let x = firstBlackHoleAt; x < lastX - 300; x += blackHoleSpacing) {
         const seed = x * 0.13
         const y = Math.round(LEVEL.groundY * (0.35 + seededUnit(seed) * 0.4))
+        const isFakePoints = bhIndex % 2 === 1 // every 2nd black hole shows fake +500
         blackHoles.push({
           x,
           y,
           pullRadius: 32,
           absorbRadius: 10,
+          ...(isFakePoints && { fakePoints: 500 }),
         })
+        bhIndex += 1
       }
       difficultyLevel = {
         ...LEVEL,
@@ -773,6 +782,20 @@ export default function Game({
           ctx.beginPath()
           ctx.arc(px, py, innerR, 0, Math.PI * 2)
           ctx.fill()
+          // Fake points lure on some black holes
+          if (bh.fakePoints != null) {
+            const label = `+${bh.fakePoints}`
+            const labelY = py - glowR - 10
+            ctx.save()
+            ctx.font = 'bold 16px system-ui, sans-serif'
+            ctx.textAlign = 'center'
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.95)'
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)'
+            ctx.lineWidth = 2
+            ctx.strokeText(label, px, labelY)
+            ctx.fillText(label, px, labelY)
+            ctx.restore()
+          }
           ctx.restore()
         })
       }
@@ -1100,6 +1123,14 @@ export default function Game({
             playsInline
             onEnded={handleWinVideoEnd}
           />
+          <button
+            type="button"
+            className="win-video-skip-btn"
+            onClick={handleWinVideoEnd}
+            aria-label="Skip video"
+          >
+            Skip
+          </button>
           {!winVideoUnmuted && (
             <button
               type="button"
