@@ -21,6 +21,7 @@ const DIFFICULTY_KEY = 'martins_baptism_difficulty'
 const BEST_SCORE_PREFIX = 'martins_best_score_'
 const INVITE_STORAGE_KEY = 'martins_baptism_invite'
 const GAME_COMPLETED_KEY = 'martins_baptism_game_completed'
+const PENDING_PROGRESS_KEY = 'martins_baptism_pending_progress'
 
 /** Returns { inviteId, inviteeName, inviteToken } from localStorage. inviteToken = stable identity across browsers. */
 function getStoredInvite() {
@@ -92,6 +93,66 @@ function setChatLastReadAt(isoString) {
     else localStorage.removeItem(CHAT_LAST_READ_KEY)
   } catch {
     /* ignore */
+  }
+}
+
+/** Pending progress: { synced: boolean, payload: { attempts, username, introSeen, difficulty, lastScore, highScore, bestScoreEasy, bestScoreMedium, bestScoreNightmare } } */
+function getPendingProgress() {
+  try {
+    const raw = localStorage.getItem(PENDING_PROGRESS_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data || typeof data.synced !== 'boolean' || !data.payload || typeof data.payload !== 'object') return null
+    const p = data.payload
+    if (!Number.isFinite(p.highScore) || p.highScore < 0) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+function setPendingProgress(entry) {
+  try {
+    if (entry == null) {
+      localStorage.removeItem(PENDING_PROGRESS_KEY)
+      return
+    }
+    localStorage.setItem(PENDING_PROGRESS_KEY, JSON.stringify(entry))
+  } catch {
+    /* ignore */
+  }
+}
+
+/** On load: if there is unsynced pending progress, try to upload it. Uses same retry pattern as syncProgressToSupabase. */
+async function trySyncPendingProgressOnLoad(supabaseClient) {
+  if (!supabaseClient) return
+  const invite = getStoredInvite()
+  if (!invite?.inviteToken) return
+  const pending = getPendingProgress()
+  if (!pending || pending.synced) return
+  const pl = pending.payload
+  const rpcPayload = {
+    p_attempts: Number.isFinite(pl.attempts) ? pl.attempts : 0,
+    p_username: (pl.username != null && String(pl.username).trim()) ? String(pl.username).trim() : '',
+    p_intro_seen: typeof pl.introSeen === 'boolean' ? pl.introSeen : false,
+    p_difficulty: pl.difficulty === 'easy' || pl.difficulty === 'medium' || pl.difficulty === 'nightmare' ? pl.difficulty : 'medium',
+    p_last_score: Number.isFinite(pl.lastScore) && pl.lastScore >= 0 ? pl.lastScore : 0,
+    p_high_score: Number.isFinite(pl.highScore) && pl.highScore >= 0 ? pl.highScore : 0,
+    p_best_score_easy: Number.isFinite(pl.bestScoreEasy) && pl.bestScoreEasy > 0 ? pl.bestScoreEasy : null,
+    p_best_score_medium: Number.isFinite(pl.bestScoreMedium) && pl.bestScoreMedium > 0 ? pl.bestScoreMedium : null,
+    p_best_score_nightmare: Number.isFinite(pl.bestScoreNightmare) && pl.bestScoreNightmare > 0 ? pl.bestScoreNightmare : null,
+  }
+  const delays = [0, 500, 1000, 2000]
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, delays[attempt]))
+    const { error } = await supabaseClient.rpc('submit_progress_by_invite_token', {
+      p_token: invite.inviteToken,
+      ...rpcPayload,
+    })
+    if (!error) {
+      setPendingProgress({ synced: true, payload: pl })
+      return
+    }
   }
 }
 
@@ -261,6 +322,12 @@ export default function App() {
   const gameOverAudioRef = useRef(null)
   const preloadedVideosRef = useRef([])
   const progressRef = useRef({ attempts: 0, username: '', hasSeenIntro: false, difficulty: 'medium' })
+  const lastScorePayloadRef = useRef(null)
+  const lastSyncPromiseRef = useRef(null)
+  const syncGenerationRef = useRef(0)
+
+  const [scoreSyncStatus, setScoreSyncStatus] = useState('idle') // 'idle' | 'pending' | 'success' | 'failed'
+  const [scoreSyncError, setScoreSyncError] = useState('')
 
   useEffect(() => {
     progressRef.current = { attempts, username, hasSeenIntro, difficulty }
@@ -325,6 +392,7 @@ export default function App() {
       if (invite?.inviteToken) {
         setAuthFailed(false)
         await hydrateProgressFromInviteToken(invite.inviteToken)
+        await trySyncPendingProgressOnLoad(supabase)
         return
       }
       setProgressLoaded(true)
@@ -336,11 +404,14 @@ export default function App() {
   }, [useSupabaseProgress, hydrateProgressFromInviteToken])
 
   // Progress is sent on every game end (win or failure). Invite-only: no auth path.
+  // Retries up to 3 times with backoff. Uses generation to ignore stale completions (no browser refresh cancel).
   const syncProgressToSupabase = useCallback(
     async (payload = null) => {
-      if (!useSupabaseProgress || !supabase) return
+      if (!useSupabaseProgress || !supabase) return { success: true, gen: 0 }
       const invite = getStoredInvite()
-      if (!invite?.inviteToken) return
+      if (!invite?.inviteToken) return { success: true, gen: 0 }
+      const gen = syncGenerationRef.current + 1
+      syncGenerationRef.current = gen
       const p = progressRef.current
       const rpcPayload = {
         p_attempts: payload?.attempts ?? p.attempts,
@@ -353,11 +424,24 @@ export default function App() {
         p_best_score_medium: payload?.bestScoreMedium ?? bestScoreMedium ?? null,
         p_best_score_nightmare: payload?.bestScoreNightmare ?? bestScoreNightmare ?? null,
       }
-      const { error } = await supabase.rpc('submit_progress_by_invite_token', {
-        p_token: invite.inviteToken,
-        ...rpcPayload,
-      })
-      if (error) console.warn('Supabase submit_progress_by_invite_token:', error.message)
+      const delays = [0, 500, 1000, 2000]
+      let lastErr = null
+      for (let attempt = 0; attempt <= 3; attempt++) {
+        if (attempt > 0) {
+          await new Promise((r) => setTimeout(r, delays[attempt]))
+          if (syncGenerationRef.current !== gen) return { success: false, error: 'cancelled', gen }
+        }
+        const { error } = await supabase.rpc('submit_progress_by_invite_token', {
+          p_token: invite.inviteToken,
+          ...rpcPayload,
+        })
+        if (!error) {
+          return { success: true, gen }
+        }
+        lastErr = error
+      }
+      if (lastErr) console.warn('Supabase submit_progress_by_invite_token (after retries):', lastErr.message)
+      return { success: false, error: lastErr?.message ?? 'Unknown error', gen }
     },
     [useSupabaseProgress, lastScore, highScore, bestScoreEasy, bestScoreMedium, bestScoreNightmare],
   )
@@ -369,10 +453,63 @@ export default function App() {
       if (payload.bestScoreEasy !== undefined) setBestScoreEasy(payload.bestScoreEasy)
       if (payload.bestScoreMedium !== undefined) setBestScoreMedium(payload.bestScoreMedium)
       if (payload.bestScoreNightmare !== undefined) setBestScoreNightmare(payload.bestScoreNightmare)
-      syncProgressToSupabase(payload).catch((err) => console.warn('Supabase submit_progress:', err?.message))
+      if (!useSupabaseProgress || !supabase) return
+      lastScorePayloadRef.current = payload
+      const payloadToStore = {
+        ...payload,
+        introSeen: typeof payload.introSeen === 'boolean' ? payload.introSeen : progressRef.current?.hasSeenIntro,
+      }
+      setPendingProgress({ synced: false, payload: payloadToStore })
+      setScoreSyncStatus('pending')
+      setScoreSyncError('')
+      const promise = syncProgressToSupabase(payload)
+        .then((result) => {
+          if (result.gen != null && result.gen !== syncGenerationRef.current) return
+          if (result.success) {
+            setPendingProgress({ synced: true, payload: payloadToStore })
+            setScoreSyncStatus('success')
+            setScoreSyncError('')
+          } else {
+            setScoreSyncStatus('failed')
+            setScoreSyncError(result.error ?? 'Nu s-a putut salva scorul.')
+          }
+        })
+        .catch((err) => {
+          setScoreSyncStatus('failed')
+          setScoreSyncError(err?.message ?? 'Nu s-a putut salva scorul.')
+        })
+      lastSyncPromiseRef.current = promise
     },
-    [syncProgressToSupabase],
+    [syncProgressToSupabase, useSupabaseProgress],
   )
+
+  const retryScoreSave = useCallback(() => {
+    const payload = lastScorePayloadRef.current
+    if (payload == null) return
+    const payloadToStore = {
+      ...payload,
+      introSeen: typeof payload.introSeen === 'boolean' ? payload.introSeen : progressRef.current?.hasSeenIntro,
+    }
+    setPendingProgress({ synced: false, payload: payloadToStore })
+    setScoreSyncStatus('pending')
+    setScoreSyncError('')
+    const promise = syncProgressToSupabase(payload)
+      .then((result) => {
+        if (result.success) {
+          setPendingProgress({ synced: true, payload: payloadToStore })
+          setScoreSyncStatus('success')
+          setScoreSyncError('')
+        } else {
+          setScoreSyncStatus('failed')
+          setScoreSyncError(result.error ?? 'Nu s-a putut salva scorul.')
+        }
+      })
+      .catch((err) => {
+        setScoreSyncStatus('failed')
+        setScoreSyncError(err?.message ?? 'Nu s-a putut salva scorul.')
+      })
+    lastSyncPromiseRef.current = promise
+  }, [syncProgressToSupabase])
 
   const ensureBackgroundSongPlaying = () => {
     if (!bgAudioRef.current) {
@@ -425,24 +562,38 @@ export default function App() {
   const startGameWithDifficulty = (selectedDifficulty) => {
     setDifficulty(selectedDifficulty)
     setAttempts((value) => value + 1)
+    setScoreSyncStatus('idle')
     setScreen('game')
   }
-  const goToEnd = () => {
+  const goToEnd = useCallback(async () => {
+    if (useSupabaseProgress && lastSyncPromiseRef.current) {
+      try {
+        await lastSyncPromiseRef.current
+      } catch (_) {
+        // already surfaced via scoreSyncStatus
+      }
+    }
     setGameCompleted(true)
     setScreen('end')
     if (useSupabaseProgress) {
       markGameCompletedToSupabase().catch((err) => console.warn('Supabase mark_game_completed:', err?.message))
     }
-  }
-  const countRetry = () => setAttempts((value) => value + 1)
+  }, [])
+  const countRetry = useCallback(() => {
+    if (scoreSyncStatus === 'pending') return
+    setScoreSyncStatus('idle')
+    setAttempts((value) => value + 1)
+  }, [scoreSyncStatus])
   const goToLanding = () => setScreen('landing')
   const goToDifficultyMenu = () => setScreen('difficulty')
   const goToDetails = () => {
     setScreen('end')
   }
-  const playAgainFromEnd = () => {
+  const playAgainFromEnd = useCallback(() => {
+    if (scoreSyncStatus === 'pending') return
+    setScoreSyncStatus('idle')
     setScreen('difficulty')
-  }
+  }, [scoreSyncStatus])
 
   const loadChatMessages = useCallback(async () => {
     if (!isSupabaseEnabled()) return
@@ -713,13 +864,25 @@ export default function App() {
                   }
                 : undefined
             }
+            scoreSyncPending={useSupabaseProgress && scoreSyncStatus === 'pending'}
+            scoreSyncFailed={useSupabaseProgress && scoreSyncStatus === 'failed'}
+            scoreSyncComplete={useSupabaseProgress && scoreSyncStatus === 'success'}
+            scoreSyncError={scoreSyncError}
+            onRetryScoreSave={retryScoreSave}
           />
         </div>
       )}
       {screen === 'end' && (
         <>
           <div ref={endRef} className="screen-wrapper">
-            <EndScreen onPlayAgain={playAgainFromEnd} onBackToMenu={goToLanding} />
+            <EndScreen
+              onPlayAgain={playAgainFromEnd}
+              onBackToMenu={goToLanding}
+              scoreSyncPending={useSupabaseProgress && scoreSyncStatus === 'pending'}
+              scoreSyncFailed={useSupabaseProgress && scoreSyncStatus === 'failed'}
+              scoreSyncError={scoreSyncError}
+              onRetryScoreSave={retryScoreSave}
+            />
           </div>
           {isMobileLandscape && (
             <div className="rotate-to-portrait-overlay" role="alert" aria-live="polite">

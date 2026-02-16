@@ -19,7 +19,7 @@ function getStoredInvite() {
   }
 }
 
-export default function EndScreen({ onPlayAgain, onBackToMenu }) {
+export default function EndScreen({ onPlayAgain, onBackToMenu, scoreSyncPending = false, scoreSyncFailed = false, scoreSyncError = '', onRetryScoreSave }) {
   const containerRef = useRef(null)
   const thankYouRef = useRef(null)
   const [submitted, setSubmitted] = useState(false)
@@ -225,10 +225,23 @@ export default function EndScreen({ onPlayAgain, onBackToMenu }) {
                 ? 'Multumim! Ne bucuram sa fii alaturi de noi. ❤️'
                 : 'Multumim pentru raspuns! Te imbratisam cu drag. 💛'}
             </p>
+            {(scoreSyncFailed && onRetryScoreSave) && (
+              <div className="end-sync-failed">
+                <p className="rsvp-submit-error">{scoreSyncError || 'Scorul nu s-a salvat.'}</p>
+                <button type="button" className="rsvp-submit" onClick={onRetryScoreSave}>
+                  Incearca din nou (salvare scor)
+                </button>
+              </div>
+            )}
             <div className="rsvp-actions">
               {onPlayAgain && (
-                <button type="button" className="rsvp-submit rsvp-play-again" onClick={onPlayAgain}>
-                  Vreau sa ma mai joc
+                <button
+                  type="button"
+                  className="rsvp-submit rsvp-play-again"
+                  onClick={onPlayAgain}
+                  disabled={scoreSyncPending}
+                >
+                  {scoreSyncPending ? 'Se salveaza scorul...' : 'Vreau sa ma mai joc'}
                 </button>
               )}
               <button type="button" className="rsvp-submit" onClick={() => setEditingResponse(true)}>

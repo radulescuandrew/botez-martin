@@ -97,6 +97,11 @@ export default function Game({
   onEarthHit,
   onScoresChange,
   scoresFromSupabase,
+  scoreSyncPending = false,
+  scoreSyncFailed = false,
+  scoreSyncComplete = false,
+  scoreSyncError = '',
+  onRetryScoreSave,
 }) {
   const fromSupabase = scoresFromSupabase != null
   const canvasRef = useRef(null)
@@ -142,14 +147,14 @@ export default function Game({
   const logicalHeight = isMobile ? PORTRAIT_HEIGHT : BASE_CANVAS_HEIGHT
   const ignoreReachEndRef = useCallback(() => {}, [])
   const difficultyMultiplier = getDifficultyMultiplier(difficulty)
-  const topThreeRows = useMemo(() => {
-    const top3 = leaderboardRows.slice(0, 3).map((r) => ({ ...r }))
-    const thirdScore = top3[2]?.high_score ?? 0
+  const topTenRows = useMemo(() => {
+    const top10 = leaderboardRows.slice(0, 10).map((r) => ({ ...r }))
+    const tenthScore = top10[9]?.high_score ?? 0
     const currentUsername = (username || '').trim()
-    const alreadyInTop3 = currentUsername
-      ? top3.some((r) => (r.username || '').trim().toLowerCase() === currentUsername.toLowerCase())
+    const alreadyInTop10 = currentUsername
+      ? top10.some((r) => (r.username || '').trim().toLowerCase() === currentUsername.toLowerCase())
       : false
-    if (!alreadyInTop3 && lastScore > 0 && (top3.length < 3 || lastScore >= thirdScore)) {
+    if (!alreadyInTop10 && lastScore > 0 && (top10.length < 10 || lastScore >= tenthScore)) {
       const currentRow = {
         username: currentUsername || 'Tu',
         high_score: lastScore,
@@ -157,16 +162,16 @@ export default function Game({
         total_attempts: attempts,
         isCurrentUser: true,
       }
-      const withoutMe = top3.filter((r) => (r.username || '').trim().toLowerCase() !== currentUsername.toLowerCase())
+      const withoutMe = top10.filter((r) => (r.username || '').trim().toLowerCase() !== currentUsername.toLowerCase())
       const merged = [...withoutMe, currentRow].sort((a, b) => (b.high_score ?? 0) - (a.high_score ?? 0))
-      return merged.slice(0, 3)
+      return merged.slice(0, 10)
     }
     if (currentUsername) {
-      top3.forEach((r) => {
+      top10.forEach((r) => {
         if ((r.username || '').trim().toLowerCase() === currentUsername.toLowerCase()) r.isCurrentUser = true
       })
     }
-    return top3
+    return top10
   }, [leaderboardRows, lastScore, username, difficulty, attempts])
 
   const loadLeaderboard = useCallback(async () => {
@@ -553,9 +558,17 @@ export default function Game({
     flapRef.current = true
   }
 
-  // Game over: show overlay (no auto-restart; user taps to try again)
+  const gameOverHandledRef = useRef(false)
+
+  // Game over: show overlay (no auto-restart; user taps to try again). Run only once per game over to avoid loop when App updates scores.
   useEffect(() => {
-    if (!gameOver) return
+    if (!gameOver) {
+      gameOverHandledRef.current = false
+      return
+    }
+    if (gameOverHandledRef.current) return
+    gameOverHandledRef.current = true
+
     setRetryLocked(true)
     setRetryLockCycle((c) => c + 1)
     if (retryLockTimerRef.current) window.clearTimeout(retryLockTimerRef.current)
@@ -619,7 +632,7 @@ export default function Game({
     e.preventDefault()
     if (winPhaseRef.current !== 'none' || menuOpen || leaderboardOpen) return
     if (gameOver) {
-      if (retryLocked) return
+      if (retryLocked || scoreSyncPending) return
       if (onRunStartAudio) onRunStartAudio()
       runAudioTriggeredRef.current = false
       setIsNewHighScore(false)
@@ -639,6 +652,8 @@ export default function Game({
   useEffect(() => {
     if (!onRunStartAudio) return
     const handleKeyDown = (e) => {
+      const target = document.activeElement
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.getAttribute('contenteditable') === 'true')) return
       if (e.key === ' ' || e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
         if (!gameOver && scrollX <= 0 && !runAudioTriggeredRef.current) {
           runAudioTriggeredRef.current = true
@@ -867,15 +882,15 @@ export default function Game({
               High score: {highScore}
             </p>
             {isNewHighScore && <p className="new-high-badge">New High Score</p>}
-            {topThreeRows.length > 0 && (
-              <div className="gameover-top3">
-                <p className="gameover-top3-title">Top 3 performante</p>
-                {topThreeRows.map((row, idx) => {
+            {topTenRows.length > 0 && (
+              <div className="gameover-top3 gameover-top10">
+                <p className="gameover-top3-title">Top 10 performante</p>
+                {topTenRows.map((row, idx) => {
                   const raw = row.best_difficulty ?? row.difficulty ?? 'medium'
                   const d = raw === 'easy' || raw === 'nightmare' ? raw : 'medium'
                   const displayName = row.isCurrentUser ? `${row.username || 'Tu'} (tu)` : (row.username || '(anonim)')
                   return (
-                    <p key={`top3-${idx}-${row.username ?? ''}-${row.high_score ?? 0}`} className={`gameover-top3-row${row.isCurrentUser ? ' gameover-top3-row-you' : ''}`}>
+                    <p key={`top10-${idx}-${row.username ?? ''}-${row.high_score ?? 0}`} className={`gameover-top3-row${row.isCurrentUser ? ' gameover-top3-row-you' : ''}`}>
                       {idx + 1}. {displayName} - {row.high_score ?? 0}{' '}
                       <span className={`difficulty-badge difficulty-badge-${d}`} title={d} aria-label={d}>
                         {d === 'easy' ? 'E' : d === 'nightmare' ? 'N' : 'M'}
@@ -886,11 +901,26 @@ export default function Game({
                 })}
               </div>
             )}
-            {retryLocked ? (
+            {(retryLocked || scoreSyncPending) && (
               <div className="retry-bar-track">
                 <div key={retryLockCycle} className="retry-bar-fill" />
               </div>
-            ) : (
+            )}
+            {scoreSyncPending && (
+              <p className="game-over-hint game-over-saving">Se salveaza scorul...</p>
+            )}
+            {scoreSyncComplete && retryLocked && (
+              <p className="game-over-hint game-over-sync-done">Score sync complete</p>
+            )}
+            {scoreSyncFailed && onRetryScoreSave && (
+              <div className="game-over-save-failed">
+                <p className="game-over-hint">{scoreSyncError || 'Scorul nu s-a salvat.'}</p>
+                <button type="button" className="rsvp-submit game-over-retry-save" onClick={(e) => { e.stopPropagation(); onRetryScoreSave() }}>
+                  Incearca din nou
+                </button>
+              </div>
+            )}
+            {!retryLocked && !scoreSyncPending && (
               <p className="game-over-hint">Tap to try again</p>
             )}
           </div>

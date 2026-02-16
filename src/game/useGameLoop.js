@@ -291,6 +291,8 @@ export function useGameLoop({
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const target = document.activeElement
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.getAttribute('contenteditable') === 'true')) return
       if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w') {
         e.preventDefault()
         if (flapRef) flapRef.current = true

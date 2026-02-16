@@ -937,7 +937,7 @@
 
 .game-score-block {
   position: absolute;
-  top: 0.45rem;
+  top: 3.5rem;
   right: 0.8rem;
   z-index: 2;
   text-align: right;
@@ -1106,7 +1106,9 @@
 }
 
 .game-over-card {
-  min-width: min(86vw, 460px);
+  min-width: min(92vw, 520px);
+  max-width: min(92vw, 520px);
+  max-height: 88vh;
   padding: 1rem 1.2rem;
   border-radius: 14px;
   border: 2px solid rgba(255, 255, 255, 0.3);
@@ -1115,6 +1117,10 @@
   text-align: center;
   position: relative;
   z-index: 2;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .game-over-title {
@@ -1141,6 +1147,17 @@
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
+}
+
+.gameover-top10 {
+  max-height: min(52vh, 360px);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.gameover-top10 .gameover-top3-row {
+  margin: 0.12rem 0;
+  font-size: clamp(0.8rem, 2.2vw, 0.92rem);
 }
 
 .gameover-top3-title {
@@ -1221,6 +1238,25 @@
   margin: 0.55rem 0 0;
   opacity: 0.9;
   font-size: clamp(0.78rem, 1.25vw, 0.96rem);
+}
+
+.game-over-hint.game-over-saving {
+  color: #9cf4ff;
+}
+
+.game-over-hint.game-over-sync-done {
+  color: #4be8c2;
+}
+
+.game-over-save-failed {
+  margin: 0.5rem 0 0;
+}
+.game-over-save-failed .game-over-hint {
+  margin: 0 0 0.35rem;
+  color: #ff7f7f;
+}
+.game-over-retry-save {
+  margin-top: 0.25rem;
 }
 
 .retry-bar-track {
@@ -1397,7 +1433,7 @@
   }
 
   .game-score-block {
-    top: calc(env(safe-area-inset-top, 0px) + 0.56rem);
+    top: calc(env(safe-area-inset-top, 0px) + 3.5rem);
     right: 0.7rem;
   }
 
@@ -1646,6 +1682,14 @@
   font-size: 1.05rem;
   margin: 0.2rem 0 0;
   text-align: center;
+}
+
+.end-sync-failed {
+  margin: 0.5rem 0 0.75rem;
+  text-align: center;
+}
+.end-sync-failed .rsvp-submit {
+  margin-top: 0.35rem;
 }
 
 .rsvp-saving {
