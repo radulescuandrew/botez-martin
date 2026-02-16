@@ -934,11 +934,14 @@
   padding: 0.14rem 0.34rem;
 }
 
-.game-username {
+.game-username-block {
   position: absolute;
   top: 2.15rem;
   left: 3.45rem;
   z-index: 2;
+}
+
+.game-username {
   margin: 0;
   font-size: clamp(0.7rem, 1.0vw, 0.9rem);
   opacity: 0.95;
@@ -953,6 +956,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.game-elapsed-block {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  text-align: center;
+  pointer-events: none;
+}
+
+.game-elapsed {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  font-weight: 600;
+  opacity: 0.95;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
 }
 
 .game-score-block {
@@ -1477,11 +1499,22 @@
     font-size: clamp(0.75rem, 2.6vw, 0.92rem);
   }
 
-  .game-username {
+  .game-username-block {
     top: calc(env(safe-area-inset-top, 0px) + 2.1rem);
     left: 3.45rem;
+  }
+
+  .game-username {
     font-size: clamp(0.72rem, 2.4vw, 0.88rem);
     max-width: 36vw;
+  }
+
+  .game-elapsed-block {
+    top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  }
+
+  .game-elapsed {
+    font-size: clamp(2.2rem, 8vw, 3rem);
   }
 
   .game-score-block {

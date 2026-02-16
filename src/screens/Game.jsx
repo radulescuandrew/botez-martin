@@ -25,6 +25,14 @@ function scrollToScoreBase(scroll) {
   return Math.floor(scroll / SCROLL_DIVISOR) * BASE_SCORE_UNIT
 }
 
+function formatElapsed(seconds) {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 function getDifficultyMultiplier(diff) {
   return diff === 'easy' ? 1 : diff === 'nightmare' ? 3 : 2
 }
@@ -132,6 +140,9 @@ export default function Game({
   const [speedUpNotificationVisible, setSpeedUpNotificationVisible] = useState(false)
   const [collectibleBonus, setCollectibleBonus] = useState(0)
   const collectibleBonusRef = useRef(0)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [runStarted, setRunStarted] = useState(false)
+  const runStartTimeRef = useRef(null)
   const collectSoundRef = useRef(null)
   const collectSoundUnlockedRef = useRef(false)
   const lastSpeedUpThousandsRef = useRef(0)
@@ -262,7 +273,7 @@ export default function Game({
       difficultyLevel = {
         ...LEVEL,
         length: 2200,
-        scrollSpeed: LEVEL.scrollSpeed * 0.86,
+        scrollSpeed: LEVEL.scrollSpeed * 1.05,
         gates: easyGates,
         obstacles: easyGates,
         planetProfile: { sideMode: 'none', radiusScale: 0.9 },
@@ -332,7 +343,7 @@ export default function Game({
       difficultyLevel = {
         ...LEVEL,
         length: nightmareLength,
-        scrollSpeed: LEVEL.scrollSpeed * 1.15,
+        scrollSpeed: LEVEL.scrollSpeed * 1.0,
         gates: nightmareGates,
         obstacles: nightmareObstacles,
         planetProfile: { sideMode: 'normal', radiusScale: 1.06 },
@@ -349,6 +360,7 @@ export default function Game({
       )
       difficultyLevel = {
         ...LEVEL,
+        scrollSpeed: LEVEL.scrollSpeed * 1.5,
         planetProfile: { sideMode: 'normal', radiusScale: 1 },
         collectibles: mediumCollectibles,
       }
@@ -459,7 +471,7 @@ export default function Game({
       const base = scrollToScoreBase(scroll)
       const displayScore = base * getDifficultyMultiplier('nightmare')
       const thousands = Math.floor(displayScore / 1000)
-      return 1 + thousands * 0.028
+      return 1 + thousands * 0.014
     },
     [difficulty]
   )
@@ -497,6 +509,20 @@ export default function Game({
   collectibleBonusRef.current = collectibleBonus
   const baseScore = scrollToScoreBase(scrollX) + collectibleBonus + (winPhase !== 'none' ? WIN_BONUS : 0)
   const score = baseScore * difficultyMultiplier
+
+  if (scrollX > 0 && runStartTimeRef.current === null) runStartTimeRef.current = Date.now()
+
+  useEffect(() => {
+    if (scrollX > 0) setRunStarted(true)
+  }, [scrollX])
+
+  useEffect(() => {
+    if (!runStarted || !runStartTimeRef.current || gameOver || winPhase !== 'none') return
+    const id = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - runStartTimeRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [runStarted, gameOver, winPhase])
 
   const handleReachEarth = useCallback((payload) => {
     if (!payload?.earth || winPhaseRef.current !== 'none') return
@@ -703,6 +729,9 @@ export default function Game({
       if (onRunStartAudio) onRunStartAudio()
       runAudioTriggeredRef.current = false
       setIsNewHighScore(false)
+      runStartTimeRef.current = null
+      setElapsedSeconds(0)
+      setRunStarted(false)
       if (onRetry) onRetry()
       reset()
       setGameOver(false)
@@ -999,7 +1028,14 @@ export default function Game({
         </div>
       )}
       <p className="game-attempts">Incercari: {attempts}</p>
-      {username && <p className="game-username">{username}</p>}
+      {username && (
+        <div className="game-username-block">
+          <p className="game-username">{username}</p>
+        </div>
+      )}
+      <div className="game-elapsed-block">
+        <p className="game-elapsed">{formatElapsed(elapsedSeconds)}</p>
+      </div>
       <div className="game-score-block">
         <p className="game-score">Scor: {score}</p>
         <p className="game-high-score">Best: {highScore}</p>
