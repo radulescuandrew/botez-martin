@@ -29,6 +29,41 @@ function getDifficultyMultiplier(diff) {
   return diff === 'easy' ? 1 : diff === 'nightmare' ? 3 : 2
 }
 
+function seededUnit(seed) {
+  const x = Math.sin(seed * 12.9898) * 43758.5453
+  return x - Math.floor(x)
+}
+
+const COLLECTIBLE_EMOJIS = ['⭐', '💎', '🎯', '🌟', '💫']
+function buildCollectibles(groundY, levelLength, startX, endX, step = 260) {
+  const list = []
+  let id = 0
+  for (let x = startX; x < endX; x += step) {
+    const t = id * 0.77
+    const band = Math.floor(seededUnit(t) * 3)
+    const points = band === 0 ? 200 : band === 1 ? 150 : 100
+    let y
+    if (band === 0) {
+      y = 28 + Math.floor(seededUnit(t + 1) * 24)
+    } else if (band === 1) {
+      const mid = Math.floor(groundY * 0.5)
+      y = mid - 20 + Math.floor(seededUnit(t + 2) * 40)
+    } else {
+      y = groundY - 45 + Math.floor(seededUnit(t + 3) * 30)
+    }
+    y = Math.max(24, Math.min(groundY - 24, y))
+    list.push({
+      id: `col-${id}-${x}`,
+      x,
+      y,
+      points,
+      emoji: COLLECTIBLE_EMOJIS[id % COLLECTIBLE_EMOJIS.length],
+    })
+    id += 1
+  }
+  return list
+}
+
 const BOY_SPRITES_BASE = '/sprites/boy_sprites_2'
 const TIMBO_BASE = '/sprites/timbo_game'
 const TOY_FILES = [
@@ -90,6 +125,9 @@ export default function Game({
   const [retryLocked, setRetryLocked] = useState(false)
   const [retryLockCycle, setRetryLockCycle] = useState(0)
   const [speedUpNotificationVisible, setSpeedUpNotificationVisible] = useState(false)
+  const [collectibleBonus, setCollectibleBonus] = useState(0)
+  const collectibleBonusRef = useRef(0)
+  const collectSoundRef = useRef(null)
   const lastSpeedUpThousandsRef = useRef(0)
   const speedUpNotificationTimerRef = useRef(null)
   const [isMobile, setIsMobile] = useState(() => (
@@ -178,6 +216,7 @@ export default function Game({
         width: Math.max(34, gate.width - 4),
         gapHeight: gate.gapHeight + 14,
       }))
+      const easyCollectibles = buildCollectibles(LEVEL.groundY, 2200, 450, 2050, 380)
       difficultyLevel = {
         ...LEVEL,
         length: 2200,
@@ -185,36 +224,65 @@ export default function Game({
         gates: easyGates,
         obstacles: easyGates,
         planetProfile: { sideMode: 'none', radiusScale: 0.9 },
+        collectibles: easyCollectibles,
       }
     } else if (difficulty === 'nightmare') {
       const nightmareLength = 78000
       const firstX = 300
       const lastX = nightmareLength - 220
-      const spacing = 140
+      const spacing = 130
       const numGates = Math.ceil((lastX - firstX) / spacing) + 1
       const nightmareGates = []
+      const nightmareObstacles = []
       for (let i = 0; i < numGates; i += 1) {
         const x = firstX + i * spacing
         if (x > lastX) break
         const t = i * 0.42
-        const gapH = Math.max(42, Math.min(48, Math.round(44 + Math.sin(t * 0.7) * 3)))
-        const lowGapY = Math.round(LEVEL.groundY - 28 - gapH - 8)
-        const highGapY = 28
+        const gapH = Math.max(38, Math.min(46, Math.round(42 + Math.sin(t * 0.7) * 2)))
+        const lowGapY = Math.round(LEVEL.groundY - 26 - gapH - 8)
+        const highGapY = 22
         const gapY = i % 2 === 0 ? lowGapY : highGapY
-        nightmareGates.push({
+        const gate = {
           x,
           gapY,
           gapHeight: gapH,
-          width: Math.max(50, Math.min(58, Math.round(53 + Math.cos(t * 0.5) * 3))),
-        })
+          width: Math.max(52, Math.min(60, Math.round(55 + Math.cos(t * 0.5) * 3))),
+        }
+        nightmareGates.push(gate)
+        if (i % 3 === 2) {
+          nightmareObstacles.push({ type: 'top', x: x + Math.floor(spacing * 0.4), width: 64 })
+        } else {
+          nightmareObstacles.push(gate)
+        }
       }
+      const collectibles = buildCollectibles(
+        LEVEL.groundY,
+        nightmareLength,
+        firstX + 180,
+        lastX - 180,
+        240
+      )
       difficultyLevel = {
         ...LEVEL,
         length: nightmareLength,
-        scrollSpeed: LEVEL.scrollSpeed * 1.1,
+        scrollSpeed: LEVEL.scrollSpeed * 1.15,
         gates: nightmareGates,
-        obstacles: nightmareGates,
-        planetProfile: { sideMode: 'normal', radiusScale: 1.04 },
+        obstacles: nightmareObstacles,
+        planetProfile: { sideMode: 'normal', radiusScale: 1.06 },
+        collectibles,
+      }
+    } else if (difficulty === 'medium') {
+      const mediumCollectibles = buildCollectibles(
+        LEVEL.groundY,
+        LEVEL.length,
+        400,
+        LEVEL.length - 200,
+        320
+      )
+      difficultyLevel = {
+        ...LEVEL,
+        planetProfile: { sideMode: 'normal', radiusScale: 1 },
+        collectibles: mediumCollectibles,
       }
     } else {
       difficultyLevel = {
@@ -251,6 +319,13 @@ export default function Game({
       }
       return { ...ob, x: ob.x + PORTRAIT_FIRST_OBSTACLE_OFFSET }
     })
+    const scaledCollectibles = difficultyLevel.collectibles
+      ? difficultyLevel.collectibles.map((c) => ({
+          ...c,
+          x: c.x + PORTRAIT_FIRST_OBSTACLE_OFFSET,
+          y: Math.round(c.y * yScale),
+        }))
+      : undefined
     return {
       ...difficultyLevel,
       length: difficultyLevel.length + PORTRAIT_FIRST_OBSTACLE_OFFSET,
@@ -262,6 +337,7 @@ export default function Game({
       },
       gates: offsetGates,
       obstacles: scaledObstacles,
+      collectibles: scaledCollectibles ?? difficultyLevel.collectibles,
     }
   }, [isMobile, logicalHeight, logicalWidth, difficulty])
 
@@ -326,8 +402,16 @@ export default function Game({
     kidScreenRatio: isMobile ? 0.18 : 0.5,
     kidCollisionInsets,
     getScrollSpeedMultiplier,
+    onCollect: (points) => {
+      setCollectibleBonus((prev) => prev + points)
+      if (!collectSoundRef.current) collectSoundRef.current = new Audio('/Mario Mushroom Sound Effect.mp3')
+      collectSoundRef.current.currentTime = 0
+      collectSoundRef.current.play().catch(() => {})
+    },
+    onReset: () => setCollectibleBonus(0),
   })
-  const baseScore = scrollToScoreBase(scrollX) + (winPhase !== 'none' ? WIN_BONUS : 0)
+  collectibleBonusRef.current = collectibleBonus
+  const baseScore = scrollToScoreBase(scrollX) + collectibleBonus + (winPhase !== 'none' ? WIN_BONUS : 0)
   const score = baseScore * difficultyMultiplier
 
   const handleReachEarth = useCallback((payload) => {
@@ -346,7 +430,8 @@ export default function Game({
       gameStateRef.current = { ...state, kid: landedKid, scrollX: payload.scrollX }
     }
 
-    const baseScoreWin = scrollToScoreBase(scroll) + WIN_BONUS
+    const bonus = collectibleBonusRef.current
+    const baseScoreWin = scrollToScoreBase(scroll) + bonus + WIN_BONUS
     const finalScore = baseScoreWin * difficultyMultiplier
     const prevHigh = fromSupabase ? (scoresFromSupabase?.highScore ?? 0) : getStoredScore(HIGH_SCORE_KEY)
     const nextHigh = Math.max(prevHigh, finalScore)
@@ -456,7 +541,8 @@ export default function Game({
     if (onRunFailAudio) onRunFailAudio()
 
     const scroll = gameStateRef.current?.scrollX || 0
-    const baseScoreNoWin = Math.max(0, scrollToScoreBase(scroll))
+    const bonus = collectibleBonusRef.current
+    const baseScoreNoWin = Math.max(0, scrollToScoreBase(scroll) + bonus)
     const runScore = baseScoreNoWin * difficultyMultiplier
     setLastScore(runScore)
 
@@ -638,6 +724,26 @@ export default function Game({
             ctx.arc(px, planet.y, planet.radius, 0, Math.PI * 2)
             ctx.fill()
           }
+        })
+      }
+
+      // Collectibles (emojis)
+      if (state.collectibles && state.collectedIds) {
+        state.collectibles.forEach((c) => {
+          if (state.collectedIds.has(c.id)) return
+          const px = c.x - state.scrollX
+          if (px < -24 || px > logicalWidth + 24) return
+          ctx.save()
+          ctx.font = '24px system-ui, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'
+          ctx.shadowBlur = 4
+          ctx.fillText(c.emoji, px, c.y)
+          ctx.font = '10px system-ui, sans-serif'
+          ctx.fillStyle = 'rgba(255, 255, 200, 0.95)'
+          ctx.fillText(`+${c.points}`, px, c.y + 18)
+          ctx.restore()
         })
       }
 

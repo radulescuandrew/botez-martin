@@ -206,6 +206,8 @@ function buildPlanets(obstacles, groundY, levelLength, canvasWidth, devFastFinis
 
 const DEFAULT_COLLISION_INSETS = { top: 0, bottom: 0, left: 0, right: 0 }
 
+const COLLECTIBLE_RADIUS = 14
+
 export function useGameLoop({
   level,
   canvasWidth,
@@ -218,6 +220,8 @@ export function useGameLoop({
   kidScreenRatio = 0.5,
   kidCollisionInsets = DEFAULT_COLLISION_INSETS,
   getScrollSpeedMultiplier,
+  onCollect,
+  onReset,
 }) {
   const { top: inT, bottom: inB, left: inL, right: inR } = kidCollisionInsets
   const devFastFinish = isDevFastFinishEnabled()
@@ -245,13 +249,17 @@ export function useGameLoop({
   const startedRef = useRef(false)
   const gameOverRef = useRef(false)
   const frameCountRef = useRef(0)
-  const gameStateRef = useRef({ kid, planets, scrollX, groundY, earthHit: null })
+  const collectibles = level.collectibles || []
+  const collectedIdsRef = useRef(new Set())
+  const gameStateRef = useRef({ kid, planets, scrollX, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current })
   const scrollSpeed = level.scrollSpeed ?? 3
 
   const reset = useCallback(() => {
     startedRef.current = false
     gameOverRef.current = false
     frameCountRef.current = 0
+    collectedIdsRef.current = new Set()
+    if (typeof onReset === 'function') onReset()
     const centerY = Math.floor((canvasHeight - kidHeight) / 2)
     kidRef.current = { y: centerY, velY: 0 }
     const resetPlanets = buildPlanets(
@@ -273,9 +281,9 @@ export function useGameLoop({
     setPlanets(resetPlanets)
     scrollRef.current = 0
     setScrollX(0)
-    gameStateRef.current = { kid: kidState, planets: resetPlanets, scrollX: 0, groundY, earthHit: null }
+    gameStateRef.current = { kid: kidState, planets: resetPlanets, scrollX: 0, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current }
     setRestartCounter((c) => c + 1)
-  }, [level.obstacles, level.gates, level.length, level.planetProfile, kidScreenX, canvasHeight, canvasWidth, groundY, kidWidth, kidHeight, devFastFinish])
+  }, [level.obstacles, level.gates, level.length, level.planetProfile, level.collectibles, kidScreenX, canvasHeight, canvasWidth, groundY, kidWidth, kidHeight, devFastFinish, onReset])
 
   useEffect(() => {
     kidScreenXRef.current = kidScreenX
@@ -335,7 +343,7 @@ export function useGameLoop({
         setKid(kidState)
         setPlanets(planetsData)
         setScrollX(scr)
-        gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: scr, groundY, earthHit: null }
+        gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: scr, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current }
         rafId = requestAnimationFrame(tick)
         return
       }
@@ -390,6 +398,8 @@ export function useGameLoop({
               planets: planetsData,
               scrollX: newScroll,
               groundY,
+              collectibles,
+              collectedIds: collectedIdsRef.current,
               earthHit: {
                 earth: planet,
                 scrollX: newScroll,
@@ -412,6 +422,27 @@ export function useGameLoop({
         }
       }
 
+      // Collectibles: check overlap with kid
+      for (const c of collectibles) {
+        if (collectedIdsRef.current.has(c.id)) continue
+        const cx = c.x - newScroll
+        if (cx + COLLECTIBLE_RADIUS < kx - 20 || cx - COLLECTIBLE_RADIUS > kx + kidWidth + 20) continue
+        const kidBox = {
+          x: kx + inL,
+          y: k.y + inT,
+          width: kidWidth - inL - inR,
+          height: kidHeight - inT - inB,
+        }
+        const closestX = clamp(cx, kidBox.x, kidBox.x + kidBox.width)
+        const closestY = clamp(c.y, kidBox.y, kidBox.y + kidBox.height)
+        const dx = cx - closestX
+        const dy = c.y - closestY
+        if (dx * dx + dy * dy < COLLECTIBLE_RADIUS * COLLECTIBLE_RADIUS) {
+          collectedIdsRef.current.add(c.id)
+          if (typeof onCollect === 'function') onCollect(c.points)
+        }
+      }
+
       // Earth must be hit to win; missing it ends the run.
       if (earth && newScroll > earth.x + earth.radius + 30) {
         gameOverRef.current = true
@@ -429,7 +460,7 @@ export function useGameLoop({
       }
 
       // Update ref every frame (for draw loop), but throttle state updates
-      gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: newScroll, groundY }
+      gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: newScroll, groundY, collectibles, collectedIds: collectedIdsRef.current }
 
       // Only update React state every 2 frames to reduce re-renders
       if (frameCountRef.current % 2 === 0) {
@@ -443,7 +474,7 @@ export function useGameLoop({
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [level.obstacles, level.gates, level.length, level.planetProfile, canvasWidth, groundY, scrollSpeed, getScrollSpeedMultiplier, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish])
+  }, [level.obstacles, level.gates, level.length, level.planetProfile, level.collectibles, canvasWidth, groundY, scrollSpeed, getScrollSpeedMultiplier, onCollect, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish])
 
   return {
     kid,

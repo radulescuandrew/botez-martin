@@ -266,7 +266,7 @@ export default function EndScreen({ onPlayAgain, onBackToMenu }) {
             </p>
             <div className="rsvp-actions">
               {onPlayAgain && (
-                <button type="button" className="rsvp-submit" onClick={onPlayAgain}>
+                <button type="button" className="rsvp-submit rsvp-play-again" onClick={onPlayAgain}>
                   Vreau sa ma mai joc
                 </button>
               )}
