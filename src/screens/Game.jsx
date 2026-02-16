@@ -100,6 +100,7 @@ export default function Game({
   onRetry,
   onBackToIntro,
   onChangeDifficulty,
+  onRunStart,
   onRunStartAudio,
   onRunFailAudio,
   onEarthHit,
@@ -594,6 +595,10 @@ export default function Game({
   }, [])
 
   useEffect(() => {
+    if (onRunStart && typeof onRunStart === 'function') onRunStart()
+  }, [onRunStart])
+
+  useEffect(() => {
     if (difficulty !== 'nightmare' || gameOver || winPhase !== 'none') return
     if (scrollX <= 0) {
       lastSpeedUpThousandsRef.current = 0
@@ -732,10 +737,17 @@ export default function Game({
       runStartTimeRef.current = null
       setElapsedSeconds(0)
       setRunStarted(false)
-      if (onRetry) onRetry()
-      reset()
-      setGameOver(false)
-      setRetryLocked(false)
+      const doRetry = () => {
+        if (onRetry) onRetry()
+        reset()
+        setGameOver(false)
+        setRetryLocked(false)
+      }
+      if (onRunStart && typeof onRunStart === 'function') {
+        Promise.resolve(onRunStart()).then(doRetry, doRetry)
+      } else {
+        doRetry()
+      }
     } else {
       if (scrollX <= 0 && onRunStartAudio && !runAudioTriggeredRef.current) {
         runAudioTriggeredRef.current = true

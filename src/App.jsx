@@ -9,6 +9,7 @@ import ChatModal from './components/ChatModal'
 import ChatButton from './components/ChatButton'
 import { supabase, isSupabaseEnabled } from './lib/supabase'
 import { fetchChatMessages, sendChatMessage } from './lib/chat'
+import { encryptProgressPayload } from './lib/submitEncrypt'
 import './App.css'
 
 const ATTEMPTS_KEY = 'martins_baptism_attempts'
@@ -123,7 +124,7 @@ function setPendingProgress(entry) {
   }
 }
 
-/** On load: if there is unsynced pending progress, try to upload it. Uses same retry pattern as syncProgressToSupabase. */
+/** On load: if there is unsynced pending progress with a session, try to upload it (encrypted). */
 async function trySyncPendingProgressOnLoad(supabaseClient) {
   if (!supabaseClient) return
   const invite = getStoredInvite()
@@ -131,23 +132,23 @@ async function trySyncPendingProgressOnLoad(supabaseClient) {
   const pending = getPendingProgress()
   if (!pending || pending.synced) return
   const pl = pending.payload
-  const rpcPayload = {
-    p_attempts: Number.isFinite(pl.attempts) ? pl.attempts : 0,
-    p_username: (pl.username != null && String(pl.username).trim()) ? String(pl.username).trim() : '',
-    p_intro_seen: typeof pl.introSeen === 'boolean' ? pl.introSeen : false,
-    p_difficulty: pl.difficulty === 'easy' || pl.difficulty === 'medium' || pl.difficulty === 'nightmare' ? pl.difficulty : 'medium',
-    p_last_score: Number.isFinite(pl.lastScore) && pl.lastScore >= 0 ? pl.lastScore : 0,
-    p_high_score: Number.isFinite(pl.highScore) && pl.highScore >= 0 ? pl.highScore : 0,
-    p_best_score_easy: Number.isFinite(pl.bestScoreEasy) && pl.bestScoreEasy > 0 ? pl.bestScoreEasy : null,
-    p_best_score_medium: Number.isFinite(pl.bestScoreMedium) && pl.bestScoreMedium > 0 ? pl.bestScoreMedium : null,
-    p_best_score_nightmare: Number.isFinite(pl.bestScoreNightmare) && pl.bestScoreNightmare > 0 ? pl.bestScoreNightmare : null,
+  if (!pl.sessionId) return
+  const plain = {
+    attempts: Number.isFinite(pl.attempts) ? pl.attempts : 0,
+    username: (pl.username != null && String(pl.username).trim()) ? String(pl.username).trim() : '',
+    intro_seen: typeof pl.introSeen === 'boolean' ? pl.introSeen : false,
+    difficulty: pl.difficulty === 'easy' || pl.difficulty === 'medium' || pl.difficulty === 'nightmare' ? pl.difficulty : 'medium',
+    last_score: Number.isFinite(pl.lastScore) && pl.lastScore >= 0 ? pl.lastScore : 0,
   }
+  const encrypted = await encryptProgressPayload(plain)
+  if (!encrypted) return
   const delays = [0, 500, 1000, 2000]
   for (let attempt = 0; attempt <= 3; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, delays[attempt]))
     const { error } = await supabaseClient.rpc('submit_progress_by_invite_token', {
       p_token: invite.inviteToken,
-      ...rpcPayload,
+      p_session_id: pl.sessionId,
+      p_encrypted_payload: encrypted,
     })
     if (!error) {
       setPendingProgress({ synced: true, payload: pl })
@@ -325,6 +326,7 @@ export default function App() {
   const lastScorePayloadRef = useRef(null)
   const lastSyncPromiseRef = useRef(null)
   const syncGenerationRef = useRef(0)
+  const sessionIdRef = useRef(null)
 
   const [scoreSyncStatus, setScoreSyncStatus] = useState('idle') // 'idle' | 'pending' | 'success' | 'failed'
   const [scoreSyncError, setScoreSyncError] = useState('')
@@ -403,27 +405,44 @@ export default function App() {
     return () => { cancelled = true }
   }, [useSupabaseProgress, hydrateProgressFromInviteToken])
 
+  const startGameSession = useCallback(async () => {
+    if (!supabase) return null
+    const invite = getStoredInvite()
+    if (!invite?.inviteToken) return null
+    const { data, error } = await supabase.rpc('start_game_session', { p_token: invite.inviteToken })
+    if (error) {
+      console.warn('start_game_session:', error.message)
+      return null
+    }
+    return data ?? null
+  }, [])
+
+  const onRunStart = useCallback(async () => {
+    const id = await startGameSession()
+    if (id) sessionIdRef.current = id
+  }, [startGameSession])
+
   // Progress is sent on every game end (win or failure). Invite-only: no auth path.
-  // Retries up to 3 times with backoff. Uses generation to ignore stale completions (no browser refresh cancel).
+  // Requires valid game session (started at run start); retries up to 3 times with backoff.
   const syncProgressToSupabase = useCallback(
     async (payload = null) => {
       if (!useSupabaseProgress || !supabase) return { success: true, gen: 0 }
       const invite = getStoredInvite()
       if (!invite?.inviteToken) return { success: true, gen: 0 }
+      const sessionId = payload?.sessionId ?? sessionIdRef.current
+      if (!sessionId) return { success: false, error: 'Session required', gen: syncGenerationRef.current }
+      const p = progressRef.current
+      const plain = {
+        attempts: payload?.attempts ?? p.attempts,
+        username: ((payload?.username ?? p.username ?? '').trim()) || (p.username ?? ''),
+        intro_seen: typeof payload?.introSeen === 'boolean' ? payload.introSeen : p.hasSeenIntro,
+        difficulty: payload?.difficulty ?? p.difficulty,
+        last_score: payload?.lastScore ?? lastScore,
+      }
+      const encrypted = await encryptProgressPayload(plain)
+      if (!encrypted) return { success: false, error: 'Encryption not configured', gen: syncGenerationRef.current }
       const gen = syncGenerationRef.current + 1
       syncGenerationRef.current = gen
-      const p = progressRef.current
-      const rpcPayload = {
-        p_attempts: payload?.attempts ?? p.attempts,
-        p_username: ((payload?.username ?? p.username ?? '').trim()) || (p.username ?? ''),
-        p_intro_seen: typeof payload?.introSeen === 'boolean' ? payload.introSeen : p.hasSeenIntro,
-        p_difficulty: payload?.difficulty ?? p.difficulty,
-        p_last_score: payload?.lastScore ?? lastScore,
-        p_high_score: payload?.highScore ?? highScore,
-        p_best_score_easy: payload?.bestScoreEasy ?? bestScoreEasy ?? null,
-        p_best_score_medium: payload?.bestScoreMedium ?? bestScoreMedium ?? null,
-        p_best_score_nightmare: payload?.bestScoreNightmare ?? bestScoreNightmare ?? null,
-      }
       const delays = [0, 500, 1000, 2000]
       let lastErr = null
       for (let attempt = 0; attempt <= 3; attempt++) {
@@ -433,7 +452,8 @@ export default function App() {
         }
         const { error } = await supabase.rpc('submit_progress_by_invite_token', {
           p_token: invite.inviteToken,
-          ...rpcPayload,
+          p_session_id: sessionId,
+          p_encrypted_payload: encrypted,
         })
         if (!error) {
           return { success: true, gen }
@@ -458,6 +478,7 @@ export default function App() {
       const payloadToStore = {
         ...payload,
         introSeen: typeof payload.introSeen === 'boolean' ? payload.introSeen : progressRef.current?.hasSeenIntro,
+        sessionId: payload.sessionId ?? sessionIdRef.current ?? null,
       }
       setPendingProgress({ synced: false, payload: payloadToStore })
       setScoreSyncStatus('pending')
@@ -849,6 +870,7 @@ export default function App() {
             onRetry={countRetry}
             onBackToIntro={goToLanding}
             onChangeDifficulty={goToDifficultyMenu}
+            onRunStart={onRunStart}
             onRunStartAudio={ensureBackgroundSongPlaying}
             onRunFailAudio={playGameOverSong}
             onEarthHit={stopBackgroundSong}
