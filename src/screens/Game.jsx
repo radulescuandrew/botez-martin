@@ -856,9 +856,16 @@ export default function Game({
         })
       }
 
-      // Kid (boy_sprites_2: Idle / Jump)
+      // Kid (boy_sprites_2: Idle / Jump); when absorbed, draw scaled toward center
       const sprites = boySpritesRef.current
       const velY = state.kid.velY ?? 0
+      const scale = state.kid.absorbedScale != null ? state.kid.absorbedScale : 1
+      const kidW = state.kid.width * scale
+      const kidH = state.kid.height * scale
+      const ox = scale < 1 ? (state.kid.width - kidW) / 2 : 0
+      const oy = scale < 1 ? (state.kid.height - kidH) / 2 : 0
+      const drawX = state.kid.x + ox
+      const drawY = state.kid.y + oy
       let img = null
       if (velY < 0 && sprites.jumpUp && sprites.jumpUp.complete) {
         img = sprites.jumpUp
@@ -874,11 +881,11 @@ export default function Game({
         ctx.drawImage(
           img,
           0, 0, img.naturalWidth, img.naturalHeight,
-          state.kid.x, state.kid.y, state.kid.width, state.kid.height
+          drawX, drawY, kidW, kidH
         )
       } else {
         ctx.fillStyle = '#3498db'
-        ctx.fillRect(state.kid.x, state.kid.y, state.kid.width, state.kid.height)
+        ctx.fillRect(drawX, drawY, kidW, kidH)
       }
     }
 

@@ -259,12 +259,15 @@ export function useGameLoop({
   const hasMovingObstacles = obstaclesSource.some((o) => o.moveY)
   const blackHoles = level.blackHoles || []
   const BLACKHOLE_PULL_STRENGTH = 28
+  const ABSORB_DURATION_MS = 700
+  const absorbedRef = useRef(null)
 
   const reset = useCallback(() => {
     startedRef.current = false
     gameOverRef.current = false
     frameCountRef.current = 0
     gameTimeRef.current = 0
+    absorbedRef.current = null
     collectedIdsRef.current = new Set()
     if (typeof onReset === 'function') onReset()
     const centerY = Math.floor((canvasHeight - kidHeight) / 2)
@@ -394,6 +397,44 @@ export function useGameLoop({
       }
 
       const kx = kidScreenXRef.current
+
+      if (absorbedRef.current) {
+        const { bh, scrollX: frozenScroll, kidY: startKidY, startTime } = absorbedRef.current
+        const elapsed = now - startTime
+        const progress = Math.min(1, elapsed / ABSORB_DURATION_MS)
+        const targetX = bh.x - frozenScroll
+        const targetY = bh.y
+        const lerpX = kx + (targetX - kx) * progress
+        const lerpY = startKidY + (targetY - startKidY) * progress
+        const absorbedScale = 1 - progress
+        const kidState = {
+          x: lerpX,
+          y: lerpY,
+          width: kidWidth,
+          height: kidHeight,
+          velY: 0,
+          absorbedScale,
+        }
+        setKid(kidState)
+        setScrollX(frozenScroll)
+        gameStateRef.current = {
+          kid: kidState,
+          planets: planetsData,
+          scrollX: frozenScroll,
+          groundY,
+          collectibles,
+          collectedIds: collectedIdsRef.current,
+          blackHoles,
+        }
+        if (progress >= 1) {
+          absorbedRef.current = null
+          gameOverRef.current = true
+          onGameOver()
+        }
+        rafId = requestAnimationFrame(tick)
+        return
+      }
+
       const speedMult = typeof getScrollSpeedMultiplier === 'function' ? getScrollSpeedMultiplier(scr) : 1
       scrollRef.current = scr + scrollSpeed * speedMult * step
       const newScroll = scrollRef.current
@@ -407,8 +448,8 @@ export function useGameLoop({
         const dy = bh.y - kidWorldY
         const dist = Math.sqrt(dx * dx + dy * dy)
         if (dist < (bh.absorbRadius ?? 10)) {
-          gameOverRef.current = true
-          onGameOver()
+          absorbedRef.current = { bh, scrollX: newScroll, kidY: k.y, startTime: now }
+          rafId = requestAnimationFrame(tick)
           return
         }
         const pullRadius = bh.pullRadius ?? 32
