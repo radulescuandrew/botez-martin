@@ -659,8 +659,8 @@ export default function App() {
   }, [loadChatMessages])
 
   useEffect(() => {
-    if (!chatOpen && isSupabaseEnabled()) {
-      chatClosedPollTimerRef.current = window.setInterval(() => loadChatMessages(), 30000)
+    if (!chatOpen && screen !== 'game' && isSupabaseEnabled()) {
+      chatClosedPollTimerRef.current = window.setInterval(() => loadChatMessages(), 20000)
       return () => {
         if (chatClosedPollTimerRef.current) {
           window.clearInterval(chatClosedPollTimerRef.current)
@@ -668,7 +668,7 @@ export default function App() {
         }
       }
     }
-  }, [chatOpen, loadChatMessages])
+  }, [chatOpen, screen, loadChatMessages])
 
   useEffect(() => {
     return () => {

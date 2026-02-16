@@ -262,6 +262,7 @@ export default function Game({
       const lastX = nightmareLength - 220
       const spacing = 130
       const numGates = Math.ceil((lastX - firstX) / spacing) + 1
+      const firstMovingAt = 1500
       const nightmareGates = []
       const nightmareObstacles = []
       for (let i = 0; i < numGates; i += 1) {
@@ -272,11 +273,13 @@ export default function Game({
         const lowGapY = Math.round(LEVEL.groundY - 26 - gapH - 8)
         const highGapY = 22
         const gapY = i % 2 === 0 ? lowGapY : highGapY
+        const hasMoving = x >= firstMovingAt && i % 4 === 0
         const gate = {
           x,
           gapY,
           gapHeight: gapH,
           width: Math.max(52, Math.min(60, Math.round(55 + Math.cos(t * 0.5) * 3))),
+          ...(hasMoving ? { moveY: { amplitude: 14, speed: 2.2, phase0: i * 0.7 } } : {}),
         }
         nightmareGates.push(gate)
         if (i % 3 === 2) {
@@ -411,7 +414,7 @@ export default function Game({
       const base = scrollToScoreBase(scroll)
       const displayScore = base * getDifficultyMultiplier('nightmare')
       const thousands = Math.floor(displayScore / 1000)
-      return 1 + thousands * 0.015
+      return 1 + thousands * 0.028
     },
     [difficulty]
   )

@@ -24,6 +24,7 @@ function checkCircleAABB(circle, rect) {
   return dx * dx + dy * dy < circle.radius * circle.radius
 }
 
+
 function isDevFastFinishEnabled() {
   if (!import.meta.env.DEV || typeof window === 'undefined') return false
   const fromQuery = new URLSearchParams(window.location.search).get('dev_fast_finish')
@@ -246,6 +247,7 @@ export function useGameLoop({
   })
   const kidScreenXRef = useRef(kidScreenX)
   const scrollRef = useRef(0)
+  const gameTimeRef = useRef(0)
   const startedRef = useRef(false)
   const gameOverRef = useRef(false)
   const frameCountRef = useRef(0)
@@ -253,11 +255,14 @@ export function useGameLoop({
   const collectedIdsRef = useRef(new Set())
   const gameStateRef = useRef({ kid, planets, scrollX, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current })
   const scrollSpeed = level.scrollSpeed ?? 3
+  const obstaclesSource = level.obstacles || level.gates || []
+  const hasMovingObstacles = obstaclesSource.some((o) => o.moveY)
 
   const reset = useCallback(() => {
     startedRef.current = false
     gameOverRef.current = false
     frameCountRef.current = 0
+    gameTimeRef.current = 0
     collectedIdsRef.current = new Set()
     if (typeof onReset === 'function') onReset()
     const centerY = Math.floor((canvasHeight - kidHeight) / 2)
@@ -304,15 +309,15 @@ export function useGameLoop({
 
   useEffect(() => {
     let rafId
-    const planetsData = buildPlanets(
-      level.obstacles || level.gates || [],
+    const staticPlanetsData = buildPlanets(
+      obstaclesSource,
       groundY,
       level.length,
       canvasWidth,
       devFastFinish,
       level.planetProfile
     )
-    const earth = planetsData.find((p) => p.kind === 'earth')
+    const earth = staticPlanetsData.find((p) => p.kind === 'earth')
 
     let lastFrameTime = null
 
@@ -343,11 +348,32 @@ export function useGameLoop({
           velY: k.velY,
         }
         setKid(kidState)
-        setPlanets(planetsData)
+        setPlanets(staticPlanetsData)
         setScrollX(scr)
-        gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: scr, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current }
+        gameStateRef.current = { kid: kidState, planets: staticPlanetsData, scrollX: scr, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current }
         rafId = requestAnimationFrame(tick)
         return
+      }
+
+      gameTimeRef.current += deltaSeconds
+      const gameTime = gameTimeRef.current
+
+      let planetsData = staticPlanetsData
+      if (hasMovingObstacles) {
+        const resolvedObstacles = obstaclesSource.map((ob) => {
+          if (!ob.moveY || ob.gapY == null) return ob
+          const phase = ob.moveY.phase0 + ob.moveY.speed * gameTime
+          const gapHeight = ob.gapHeight ?? 44
+          const minGapY = 18
+          const maxGapY = groundY - gapHeight - 18
+          const gapY = clamp(
+            ob.gapY + ob.moveY.amplitude * Math.sin(phase),
+            minGapY,
+            maxGapY
+          )
+          return { ...ob, gapY }
+        })
+        planetsData = buildPlanets(resolvedObstacles, groundY, level.length, canvasWidth, devFastFinish, level.planetProfile)
       }
 
       if (flapRef?.current) {
@@ -476,7 +502,7 @@ export function useGameLoop({
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [level.obstacles, level.gates, level.length, level.planetProfile, level.collectibles, canvasWidth, groundY, scrollSpeed, getScrollSpeedMultiplier, onCollect, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish])
+  }, [level.obstacles, level.gates, level.length, level.planetProfile, level.collectibles, canvasWidth, groundY, scrollSpeed, getScrollSpeedMultiplier, onCollect, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish, hasMovingObstacles, obstaclesSource])
 
   return {
     kid,
