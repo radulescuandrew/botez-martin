@@ -498,7 +498,7 @@ export default function App() {
     setScreen('end')
   }
   const playAgainFromEnd = () => {
-    setScreen('game')
+    setScreen('difficulty')
   }
 
   useEffect(() => {

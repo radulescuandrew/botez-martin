@@ -142,7 +142,32 @@ export default function Game({
   const logicalHeight = isMobile ? PORTRAIT_HEIGHT : BASE_CANVAS_HEIGHT
   const ignoreReachEndRef = useCallback(() => {}, [])
   const difficultyMultiplier = getDifficultyMultiplier(difficulty)
-  const topThreeRows = leaderboardRows.slice(0, 3)
+  const topThreeRows = useMemo(() => {
+    const top3 = leaderboardRows.slice(0, 3).map((r) => ({ ...r }))
+    const thirdScore = top3[2]?.high_score ?? 0
+    const currentUsername = (username || '').trim()
+    const alreadyInTop3 = currentUsername
+      ? top3.some((r) => (r.username || '').trim().toLowerCase() === currentUsername.toLowerCase())
+      : false
+    if (!alreadyInTop3 && lastScore > 0 && (top3.length < 3 || lastScore >= thirdScore)) {
+      const currentRow = {
+        username: currentUsername || 'Tu',
+        high_score: lastScore,
+        best_difficulty: difficulty,
+        total_attempts: attempts,
+        isCurrentUser: true,
+      }
+      const withoutMe = top3.filter((r) => (r.username || '').trim().toLowerCase() !== currentUsername.toLowerCase())
+      const merged = [...withoutMe, currentRow].sort((a, b) => (b.high_score ?? 0) - (a.high_score ?? 0))
+      return merged.slice(0, 3)
+    }
+    if (currentUsername) {
+      top3.forEach((r) => {
+        if ((r.username || '').trim().toLowerCase() === currentUsername.toLowerCase()) r.isCurrentUser = true
+      })
+    }
+    return top3
+  }, [leaderboardRows, lastScore, username, difficulty, attempts])
 
   const loadLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true)
@@ -848,9 +873,10 @@ export default function Game({
                 {topThreeRows.map((row, idx) => {
                   const raw = row.best_difficulty ?? row.difficulty ?? 'medium'
                   const d = raw === 'easy' || raw === 'nightmare' ? raw : 'medium'
+                  const displayName = row.isCurrentUser ? `${row.username || 'Tu'} (tu)` : (row.username || '(anonim)')
                   return (
-                    <p key={`top3-${idx}`} className="gameover-top3-row">
-                      {idx + 1}. {row.username || '(anonim)'} - {row.high_score ?? 0}{' '}
+                    <p key={`top3-${idx}-${row.username ?? ''}-${row.high_score ?? 0}`} className={`gameover-top3-row${row.isCurrentUser ? ' gameover-top3-row-you' : ''}`}>
+                      {idx + 1}. {displayName} - {row.high_score ?? 0}{' '}
                       <span className={`difficulty-badge difficulty-badge-${d}`} title={d} aria-label={d}>
                         {d === 'easy' ? 'E' : d === 'nightmare' ? 'N' : 'M'}
                       </span>{' '}

@@ -1156,6 +1156,11 @@
   font-size: 0.96rem;
 }
 
+.gameover-top3-row-you {
+  font-weight: 700;
+  color: #ffe389;
+}
+
 .highscore-hit {
   color: #ffe990;
   animation: high-score-pop 0.9s ease-in-out infinite;
