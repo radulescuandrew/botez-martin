@@ -207,6 +207,28 @@
   background: #e2e8f0;
 }
 
+.admin-delete-btn {
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.admin-delete-btn:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.admin-delete-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .admin-pill {
   display: inline-flex;
   align-items: center;
@@ -290,16 +312,17 @@
   text-align: right;
 }
 
-.admin-status-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.admin-status-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .admin-status-card {
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 10px;
+  padding: 12px 14px;
+  min-width: 0;
 }
 
 .admin-status-card-coming {
@@ -310,6 +333,11 @@
 .admin-status-card-not-coming {
   background: #fef2f2;
   border-color: #fca5a5;
+}
+
+.admin-status-card-no-answer {
+  background: #fefce8;
+  border-color: #fde047;
 }
 
 .admin-status-title {
@@ -374,8 +402,8 @@
     min-width: 0;
   }
 
-  .admin-status-grid {
-    grid-template-columns: 1fr;
+  .admin-status-rows {
+    gap: 1rem;
   }
 
   /* Horizontal scroll: touch-friendly, with hint and sticky first column */

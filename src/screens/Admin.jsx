@@ -2,6 +2,21 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase, isSupabaseEnabled, getSupabaseSession } from '../lib/supabase'
 import './Admin.css'
 
+const ADMIN_OPEN_STORAGE_KEY = 'admin-open-sections'
+const DEFAULT_OPEN_SECTIONS = { invitees: true, completed: true, progress: true, rsvp: true }
+
+function getStoredOpenSections() {
+  if (typeof localStorage === 'undefined') return DEFAULT_OPEN_SECTIONS
+  try {
+    const raw = localStorage.getItem(ADMIN_OPEN_STORAGE_KEY)
+    if (!raw) return DEFAULT_OPEN_SECTIONS
+    const parsed = JSON.parse(raw)
+    return { ...DEFAULT_OPEN_SECTIONS, ...parsed }
+  } catch {
+    return DEFAULT_OPEN_SECTIONS
+  }
+}
+
 export default function Admin() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,6 +34,9 @@ export default function Admin() {
   const [copyId, setCopyId] = useState(null)
   const [attendanceUpdateError, setAttendanceUpdateError] = useState('')
   const [updatingAttendanceId, setUpdatingAttendanceId] = useState(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [deletingInviteeId, setDeletingInviteeId] = useState(null)
+  const [openSections, setOpenSections] = useState(getStoredOpenSections)
 
   const isAdmin = profile?.role === 'admin'
 
@@ -149,6 +167,16 @@ export default function Admin() {
     return '—'
   }
 
+  const setSectionOpen = useCallback((key, open) => {
+    setOpenSections((prev) => {
+      const next = { ...prev, [key]: open }
+      try {
+        localStorage.setItem(ADMIN_OPEN_STORAGE_KEY, JSON.stringify(next))
+      } catch (_) {}
+      return next
+    })
+  }, [])
+
   const getInviteLink = (id) => {
     const base = window.location.origin
     return `${base}/invite/${id}`
@@ -160,6 +188,23 @@ export default function Admin() {
       setCopyId(id)
       setTimeout(() => setCopyId(null), 2000)
     })
+  }
+
+  const handleDeleteInvitee = async (inv) => {
+    if (!supabase || !isAdmin) return
+    const message = `Stergi pe "${inv.name}" si toate datele asociate (progres, RSVP, link)? Nu poți anula.`
+    if (!window.confirm(message)) return
+    setDeleteError('')
+    setDeletingInviteeId(inv.id)
+    const { error } = await supabase.rpc('delete_invitee', { p_invitee_id: inv.id })
+    setDeletingInviteeId(null)
+    if (error) {
+      setDeleteError(error.message ?? 'Eroare la stergere.')
+      return
+    }
+    await loadInvitees()
+    await loadRsvps()
+    await loadProgress()
   }
 
   const updateAttendance = async (rowId, nextPartyAttending) => {
@@ -244,10 +289,10 @@ export default function Admin() {
   }
 
   const respondedInviteeIds = new Set(rsvpList.map((row) => row.invitee_id).filter(Boolean))
-  const respondedInvitees = respondedInviteeIds.size
   const comingInvitees = rsvpList.filter((row) => row.party_attending === true)
   const notComingInvitees = rsvpList.filter((row) => row.party_attending === false)
-  const unconfirmedInvitees = Math.max(0, invitees.length - respondedInvitees)
+  const noAnswerInvitees = invitees.filter((inv) => !respondedInviteeIds.has(inv.id))
+  const unconfirmedInvitees = noAnswerInvitees.length
   const comingPeopleCount = comingInvitees.reduce((sum, row) => sum + 1 + Math.max(0, Number(row.plus_one_count) || 0), 0)
   const notComingPeopleCount = notComingInvitees.reduce((sum, row) => sum + 1 + Math.max(0, Number(row.plus_one_count) || 0), 0)
   const completedList = (progressList || []).filter((r) => r.completed_game)
@@ -300,12 +345,17 @@ export default function Admin() {
           {addError && <p className="admin-error">{addError}</p>}
         </div>
 
-        <details className="admin-card admin-collapsible" open>
+        <details
+          className="admin-card admin-collapsible"
+          open={openSections.invitees}
+          onToggle={(e) => setSectionOpen('invitees', e.target.open)}
+        >
           <summary className="admin-collapsible-summary">
             <span className="admin-subtitle">Lista invitatii</span>
             <span className="admin-collapsible-meta">{invitees.length}</span>
           </summary>
           <div className="admin-collapsible-content">
+            {deleteError && <p className="admin-error">{deleteError}</p>}
             <div className="admin-table-wrap">
               <table className="admin-table">
                 <thead>
@@ -313,12 +363,13 @@ export default function Admin() {
                     <th>Nume</th>
                     <th>Link</th>
                     <th>Joined At</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {invitees.length === 0 ? (
                     <tr>
-                      <td colSpan={3}>Niciun invitat inca.</td>
+                      <td colSpan={4}>Niciun invitat inca.</td>
                     </tr>
                   ) : (
                     invitees.map((inv) => (
@@ -335,6 +386,17 @@ export default function Admin() {
                           </button>
                         </td>
                         <td>{formatDate(inv.joined_at)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="admin-delete-btn"
+                            onClick={() => handleDeleteInvitee(inv)}
+                            disabled={deletingInviteeId === inv.id}
+                            title="Sterge invitat si toate datele"
+                          >
+                            {deletingInviteeId === inv.id ? 'Se sterge…' : 'Sterge'}
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -344,7 +406,11 @@ export default function Admin() {
           </div>
         </details>
 
-        <details className="admin-card admin-collapsible" open>
+        <details
+          className="admin-card admin-collapsible"
+          open={openSections.completed}
+          onToggle={(e) => setSectionOpen('completed', e.target.open)}
+        >
           <summary className="admin-collapsible-summary">
             <span className="admin-subtitle">Istoric joc (cine a terminat jocul)</span>
             <span className="admin-collapsible-meta">{completedList.length}</span>
@@ -379,7 +445,11 @@ export default function Admin() {
           </div>
         </details>
 
-        <details className="admin-card admin-collapsible" open>
+        <details
+          className="admin-card admin-collapsible"
+          open={openSections.progress}
+          onToggle={(e) => setSectionOpen('progress', e.target.open)}
+        >
           <summary className="admin-collapsible-summary">
             <span className="admin-subtitle">Progres si scoruri (toti jucatorii)</span>
             <span className="admin-collapsible-meta">{progressList.length}</span>
@@ -433,15 +503,19 @@ export default function Admin() {
           </div>
         </details>
 
-        <details className="admin-card admin-collapsible" open>
+        <details
+          className="admin-card admin-collapsible"
+          open={openSections.rsvp}
+          onToggle={(e) => setSectionOpen('rsvp', e.target.open)}
+        >
           <summary className="admin-collapsible-summary">
             <span className="admin-subtitle">Status participare (din RSVP)</span>
-            <span className="admin-collapsible-meta">{comingPeopleCount}/{comingPeopleCount + notComingPeopleCount}</span>
+            <span className="admin-collapsible-meta">Vin {comingPeopleCount} · Nu vin {notComingPeopleCount} · Fara raspuns {noAnswerInvitees.length}</span>
           </summary>
           <div className="admin-collapsible-content">
             {rsvpError && <p className="admin-error">{rsvpError}</p>}
             {attendanceUpdateError && <p className="admin-error">{attendanceUpdateError}</p>}
-            <div className="admin-status-grid">
+            <div className="admin-status-rows">
               <div className="admin-status-card admin-status-card-coming">
                 <h3 className="admin-status-title">Vin</h3>
                 <div className="admin-table-wrap">
@@ -486,7 +560,7 @@ export default function Admin() {
               </div>
 
               <div className="admin-status-card admin-status-card-not-coming">
-                <h3 className="admin-status-title">Nu vin / Neconfirmat</h3>
+                <h3 className="admin-status-title">Nu vin</h3>
                 <div className="admin-table-wrap">
                   <table className="admin-table">
                     <thead>
@@ -518,6 +592,45 @@ export default function Admin() {
                                 {updatingAttendanceId === row.id ? 'Se salveaza...' : 'Muta la Vin'}
                               </button>
                             </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="admin-status-card admin-status-card-no-answer">
+                <h3 className="admin-status-title">Fara raspuns inca</h3>
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Nume</th>
+                        <th>Link</th>
+                        <th>Joined At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {noAnswerInvitees.length === 0 ? (
+                        <tr>
+                          <td colSpan={3}>Toți au raspuns.</td>
+                        </tr>
+                      ) : (
+                        noAnswerInvitees.map((inv) => (
+                          <tr key={`no-answer-${inv.id}`}>
+                            <td>{inv.name}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="admin-link-btn"
+                                onClick={() => copyLink(inv.id)}
+                                title="Copiaza link"
+                              >
+                                {copyId === inv.id ? 'Copiat' : 'Copiaza link'}
+                              </button>
+                            </td>
+                            <td>{formatDate(inv.joined_at)}</td>
                           </tr>
                         ))
                       )}
