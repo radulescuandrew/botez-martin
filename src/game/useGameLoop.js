@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 
 const GRAVITY = 0.36
 const FLAP_VELOCITY = -3.9
-const SIMULATION_SPEED = 1.7
+const SIMULATION_SPEED = 1.0
 const DEFAULT_KID_WIDTH = 22
 const DEFAULT_KID_HEIGHT = 22
 const GROUND_MARGIN = 4

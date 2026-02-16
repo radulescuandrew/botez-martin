@@ -133,6 +133,7 @@ export default function Game({
   const [collectibleBonus, setCollectibleBonus] = useState(0)
   const collectibleBonusRef = useRef(0)
   const collectSoundRef = useRef(null)
+  const collectSoundUnlockedRef = useRef(false)
   const lastSpeedUpThousandsRef = useRef(0)
   const speedUpNotificationTimerRef = useRef(null)
   const [isMobile, setIsMobile] = useState(() => (
@@ -202,6 +203,17 @@ export default function Game({
     handleChange()
     media.addEventListener('change', handleChange)
     return () => media.removeEventListener('change', handleChange)
+  }, [])
+
+  // Preload collect bonus sound so it's ready and can be unlocked on first user gesture
+  useEffect(() => {
+    const audio = new Audio('/Mario Mushroom Sound Effect.mp3')
+    audio.preload = 'auto'
+    collectSoundRef.current = audio
+    return () => {
+      collectSoundRef.current = null
+      collectSoundUnlockedRef.current = false
+    }
   }, [])
 
   useEffect(() => {
@@ -452,6 +464,17 @@ export default function Game({
     [difficulty]
   )
 
+  const onGameOver = useCallback(() => setGameOver(true), [])
+  const onResetCollect = useCallback(() => setCollectibleBonus(0), [])
+  const onCollect = useCallback((points) => {
+    setCollectibleBonus((prev) => prev + points)
+    const audio = collectSoundRef.current
+    if (audio) {
+      audio.currentTime = 0
+      audio.play().catch(() => {})
+    }
+  }, [])
+
   const {
     scrollX,
     reset,
@@ -461,20 +484,15 @@ export default function Game({
     canvasWidth: logicalWidth,
     canvasHeight: logicalHeight,
     onReachEnd: ignoreReachEndRef,
-    onGameOver: () => setGameOver(true),
+    onGameOver,
     flapRef,
     kidWidth: isMobile ? 28 : 18,
     kidHeight: isMobile ? 34 : 22,
     kidScreenRatio: isMobile ? 0.18 : 0.5,
     kidCollisionInsets,
     getScrollSpeedMultiplier,
-    onCollect: (points) => {
-      setCollectibleBonus((prev) => prev + points)
-      if (!collectSoundRef.current) collectSoundRef.current = new Audio('/Mario Mushroom Sound Effect.mp3')
-      collectSoundRef.current.currentTime = 0
-      collectSoundRef.current.play().catch(() => {})
-    },
-    onReset: () => setCollectibleBonus(0),
+    onCollect,
+    onReset: onResetCollect,
   })
   collectibleBonusRef.current = collectibleBonus
   const baseScore = scrollToScoreBase(scrollX) + collectibleBonus + (winPhase !== 'none' ? WIN_BONUS : 0)
@@ -667,6 +685,19 @@ export default function Game({
   const handlePointerDown = (e) => {
     e.preventDefault()
     if (winPhaseRef.current !== 'none' || menuOpen || leaderboardOpen) return
+
+    // Unlock collect bonus sound on first user gesture; defer so flap is processed first
+    if (!collectSoundUnlockedRef.current && collectSoundRef.current) {
+      collectSoundUnlockedRef.current = true
+      const audio = collectSoundRef.current
+      setTimeout(() => {
+        audio.play().then(() => {
+          audio.pause()
+          audio.currentTime = 0
+        }).catch(() => {})
+      }, 0)
+    }
+
     if (gameOver) {
       if (retryLocked || scoreSyncPending) return
       if (onRunStartAudio) onRunStartAudio()
@@ -691,6 +722,16 @@ export default function Game({
       const target = document.activeElement
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.getAttribute('contenteditable') === 'true')) return
       if (e.key === ' ' || e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
+        if (!collectSoundUnlockedRef.current && collectSoundRef.current) {
+          collectSoundUnlockedRef.current = true
+          const audio = collectSoundRef.current
+          setTimeout(() => {
+            audio.play().then(() => {
+              audio.pause()
+              audio.currentTime = 0
+            }).catch(() => {})
+          }, 0)
+        }
         if (!gameOver && scrollX <= 0 && !runAudioTriggeredRef.current) {
           runAudioTriggeredRef.current = true
           onRunStartAudio()
