@@ -3,6 +3,7 @@ import { supabase, isSupabaseEnabled, getSupabaseSession } from '../lib/supabase
 import './Admin.css'
 
 const ADMIN_OPEN_STORAGE_KEY = 'admin-open-sections'
+const ADMIN_SHOW_MERGED_KEY = 'admin-show-merged'
 const DEFAULT_OPEN_SECTIONS = { invitees: true, completed: true, progress: true, rsvp: true }
 
 function getStoredOpenSections() {
@@ -37,6 +38,24 @@ export default function Admin() {
   const [deleteError, setDeleteError] = useState('')
   const [deletingInviteeId, setDeletingInviteeId] = useState(null)
   const [openSections, setOpenSections] = useState(getStoredOpenSections)
+  const [showMerged, setShowMerged] = useState(() => {
+    try {
+      return localStorage.getItem(ADMIN_SHOW_MERGED_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
+  const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [mergeTargetRow, setMergeTargetRow] = useState(null)
+  const [mergeSourceRowId, setMergeSourceRowId] = useState('')
+  const [mergePlusOneName, setMergePlusOneName] = useState('')
+  const [mergeError, setMergeError] = useState('')
+  const [merging, setMerging] = useState(false)
+  const [addVinName, setAddVinName] = useState('')
+  const [addVinInviteeId, setAddVinInviteeId] = useState('')
+  const [addVinChurch, setAddVinChurch] = useState(true)
+  const [addVinError, setAddVinError] = useState('')
+  const [addVinSaving, setAddVinSaving] = useState(false)
 
   const isAdmin = profile?.role === 'admin'
 
@@ -72,7 +91,7 @@ export default function Admin() {
     setRsvpError('')
     const { data, error } = await supabase
       .from('invite_rsvps')
-      .select('id, invitee_id, guest_name, church_attending, party_attending, plus_one, plus_one_count, plus_one_names, dietary_restrictions, dietary_restrictions_note, updated_at, invitees(name)')
+      .select('id, invitee_id, guest_name, church_attending, party_attending, plus_one, plus_one_count, plus_one_names, dietary_restrictions, dietary_restrictions_note, merged_into_rsvp_id, updated_at, invitees(name)')
       .order('updated_at', { ascending: false })
     if (error) {
       setRsvpError(error.message ?? 'Eroare la incarcarea RSVP.')
@@ -119,6 +138,15 @@ export default function Admin() {
       loadProgress()
     }
   }, [isAdmin, loadInvitees, loadRsvps, loadProgress])
+
+  useEffect(() => {
+    if (!mergeModalOpen) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') closeMergeModal()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [mergeModalOpen])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -224,6 +252,115 @@ export default function Admin() {
     setUpdatingAttendanceId(null)
   }
 
+  const toggleShowMerged = () => {
+    const next = !showMerged
+    setShowMerged(next)
+    try {
+      localStorage.setItem(ADMIN_SHOW_MERGED_KEY, next ? 'true' : 'false')
+    } catch (_) {}
+  }
+
+  const openMergeModal = (targetRow) => {
+    setMergeTargetRow(targetRow)
+    setMergeSourceRowId('')
+    setMergePlusOneName('')
+    setMergeError('')
+    setMergeModalOpen(true)
+  }
+
+  const closeMergeModal = () => {
+    setMergeModalOpen(false)
+    setMergeTargetRow(null)
+    setMergeSourceRowId('')
+    setMergePlusOneName('')
+    setMergeError('')
+  }
+
+  const onMergeSourceChange = (sourceId) => {
+    setMergeSourceRowId(sourceId)
+    if (sourceId) {
+      const row = comingInvitees.find((r) => r.id === sourceId)
+      setMergePlusOneName(row?.invitees?.name || row?.guest_name || '')
+    } else {
+      setMergePlusOneName('')
+    }
+  }
+
+  const handleMergeSubmit = async () => {
+    if (!supabase || !isAdmin || !mergeTargetRow || !mergeSourceRowId) return
+    const name = mergePlusOneName.trim()
+    if (!name) {
+      setMergeError('Introdu numele pentru +1.')
+      return
+    }
+    setMergeError('')
+    setMerging(true)
+    const targetId = mergeTargetRow.id
+    const sourceId = mergeSourceRowId
+    const existingNames = Array.isArray(mergeTargetRow.plus_one_names) ? mergeTargetRow.plus_one_names : []
+    const newPlusOneNames = [...existingNames, name]
+    const newPlusOneCount = newPlusOneNames.length
+
+    const { error: err1 } = await supabase
+      .from('invite_rsvps')
+      .update({ merged_into_rsvp_id: targetId })
+      .eq('id', sourceId)
+    if (err1) {
+      setMergeError(err1.message ?? 'Eroare la unire.')
+      setMerging(false)
+      return
+    }
+    const { error: err2 } = await supabase
+      .from('invite_rsvps')
+      .update({
+        plus_one: true,
+        plus_one_count: newPlusOneCount,
+        plus_one_names: newPlusOneNames,
+      })
+      .eq('id', targetId)
+    if (err2) {
+      setMergeError(err2.message ?? 'Eroare la actualizarea rândului.')
+      setMerging(false)
+      return
+    }
+    setMerging(false)
+    closeMergeModal()
+    await loadRsvps()
+  }
+
+  const handleAddVin = async (e) => {
+    e.preventDefault()
+    if (!supabase || !isAdmin) return
+    const name = addVinName.trim()
+    if (!name) {
+      setAddVinError('Introdu numele.')
+      return
+    }
+    setAddVinError('')
+    setAddVinSaving(true)
+    const { error } = await supabase.from('invite_rsvps').insert({
+      user_id: null,
+      invitee_id: addVinInviteeId || null,
+      guest_name: name,
+      church_attending: addVinChurch,
+      party_attending: true,
+      plus_one: false,
+      plus_one_count: 0,
+      plus_one_names: [],
+      meal_preference: 'normal',
+      dietary_restrictions: false,
+    })
+    setAddVinSaving(false)
+    if (error) {
+      setAddVinError(error.message ?? 'Eroare la adaugare.')
+      return
+    }
+    setAddVinName('')
+    setAddVinInviteeId('')
+    setAddVinChurch(true)
+    await loadRsvps()
+  }
+
   if (!isSupabaseEnabled()) {
     return (
       <div className="admin-page">
@@ -290,11 +427,19 @@ export default function Admin() {
 
   const respondedInviteeIds = new Set(rsvpList.map((row) => row.invitee_id).filter(Boolean))
   const comingInvitees = rsvpList.filter((row) => row.party_attending === true)
+  const comingInviteesVisible = showMerged
+    ? comingInvitees
+    : comingInvitees.filter((row) => !row.merged_into_rsvp_id)
   const notComingInvitees = rsvpList.filter((row) => row.party_attending === false)
   const noAnswerInvitees = invitees.filter((inv) => !respondedInviteeIds.has(inv.id))
   const unconfirmedInvitees = noAnswerInvitees.length
   const comingPeopleCount = comingInvitees.reduce((sum, row) => sum + 1 + Math.max(0, Number(row.plus_one_count) || 0), 0)
   const notComingPeopleCount = notComingInvitees.reduce((sum, row) => sum + 1 + Math.max(0, Number(row.plus_one_count) || 0), 0)
+  const mergeCandidateRows = mergeTargetRow
+    ? comingInvitees.filter(
+        (row) => row.id !== mergeTargetRow.id && !row.merged_into_rsvp_id
+      )
+    : []
   const completedList = (progressList || []).filter((r) => r.completed_game)
 
   return (
@@ -517,12 +662,65 @@ export default function Admin() {
             {attendanceUpdateError && <p className="admin-error">{attendanceUpdateError}</p>}
             <div className="admin-status-rows">
               <div className="admin-status-card admin-status-card-coming">
-                <h3 className="admin-status-title">Vin</h3>
+                <div className="admin-status-header">
+                  <h3 className="admin-status-title">Vin</h3>
+                  <button
+                    type="button"
+                    className="admin-link-btn admin-show-merged-btn"
+                    onClick={toggleShowMerged}
+                    title={showMerged ? 'Ascunde rândurile unite' : 'Arată rândurile unite'}
+                  >
+                    {showMerged ? 'Ascunde unite' : 'Arată unite'}
+                  </button>
+                </div>
+                <form onSubmit={handleAddVin} className="admin-add-vin-form">
+                  <div className="admin-add-vin-fields">
+                    <input
+                      type="text"
+                      className="admin-input admin-add-vin-name"
+                      placeholder="Nume"
+                      value={addVinName}
+                      onChange={(e) => setAddVinName(e.target.value)}
+                      maxLength={200}
+                    />
+                    <select
+                      className="admin-input admin-add-vin-invitee"
+                      value={addVinInviteeId}
+                      onChange={(e) => setAddVinInviteeId(e.target.value)}
+                      title="Optional: leagă de un invitat"
+                    >
+                      <option value="">— Fără invitat —</option>
+                      {invitees.map((inv) => (
+                        <option key={inv.id} value={inv.id}>
+                          {inv.name}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="admin-add-vin-church">
+                      <input
+                        type="checkbox"
+                        checked={addVinChurch}
+                        onChange={(e) => setAddVinChurch(e.target.checked)}
+                      />
+                      <span>Biserica</span>
+                    </label>
+                    <button
+                      type="submit"
+                      className="admin-btn admin-add-vin-btn"
+                      disabled={addVinSaving}
+                    >
+                      {addVinSaving ? 'Se adauga...' : 'Adauga la Vin'}
+                    </button>
+                  </div>
+                  {addVinError && <p className="admin-error">{addVinError}</p>}
+                </form>
                 <div className="admin-table-wrap">
                   <table className="admin-table">
                     <thead>
                       <tr>
                         <th>Nume</th>
+                        <th title="Biserica">⛪</th>
+                        <th title="Petrecere">🎉</th>
                         <th>+1</th>
                         <th>Nume +1</th>
                         <th>Restrictii</th>
@@ -530,26 +728,38 @@ export default function Admin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {comingInvitees.length === 0 ? (
+                      {comingInviteesVisible.length === 0 ? (
                         <tr>
-                          <td colSpan={5}>Nimeni inca.</td>
+                          <td colSpan={7}>{showMerged ? 'Nimeni inca.' : 'Nimeni inca. (Unitele sunt ascunse.)'}</td>
                         </tr>
                       ) : (
-                        comingInvitees.map((row) => (
+                        comingInviteesVisible.map((row) => (
                           <tr key={`coming-${row.id}`}>
                             <td>{row.invitees?.name || row.guest_name || '(anonim)'}</td>
+                            <td title="Biserica">{row.church_attending ? '✅' : '❌'}</td>
+                            <td title="Petrecere">{row.party_attending ? '✅' : '❌'}</td>
                             <td>{row.plus_one ? row.plus_one_count : 0}</td>
                             <td>{Array.isArray(row.plus_one_names) && row.plus_one_names.length > 0 ? row.plus_one_names.join(', ') : '—'}</td>
                             <td>{row.dietary_restrictions ? (row.dietary_restrictions_note || 'Da') : 'Nu'}</td>
                             <td>
-                              <button
-                                type="button"
-                                className="admin-link-btn"
-                                onClick={() => updateAttendance(row.id, false)}
-                                disabled={updatingAttendanceId === row.id}
-                              >
-                                {updatingAttendanceId === row.id ? 'Se salveaza...' : 'Muta la Nu vin'}
-                              </button>
+                              <div className="admin-action-buttons">
+                                <button
+                                  type="button"
+                                  className="admin-link-btn"
+                                  onClick={() => openMergeModal(row)}
+                                  title="Uneste alt rând aici (ex. cuplu care a raspuns de doua ori)"
+                                >
+                                  Uneste
+                                </button>
+                                <button
+                                  type="button"
+                                  className="admin-link-btn"
+                                  onClick={() => updateAttendance(row.id, false)}
+                                  disabled={updatingAttendanceId === row.id}
+                                >
+                                  {updatingAttendanceId === row.id ? 'Se salveaza...' : 'Muta la Nu vin'}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -566,7 +776,8 @@ export default function Admin() {
                     <thead>
                       <tr>
                         <th>Nume</th>
-                        <th>Biserica</th>
+                        <th title="Biserica">⛪</th>
+                        <th title="Petrecere">🎉</th>
                         <th>Actualizat</th>
                         <th>Actiune</th>
                       </tr>
@@ -574,13 +785,14 @@ export default function Admin() {
                     <tbody>
                       {notComingInvitees.length === 0 ? (
                         <tr>
-                          <td colSpan={4}>Nimeni inca.</td>
+                          <td colSpan={5}>Nimeni inca.</td>
                         </tr>
                       ) : (
                         notComingInvitees.map((row) => (
                           <tr key={`not-coming-${row.id}`}>
                             <td>{row.invitees?.name || row.guest_name || '(anonim)'}</td>
-                            <td>{row.church_attending ? 'Da' : 'Nu'}</td>
+                            <td title="Biserica">{row.church_attending ? '✅' : '❌'}</td>
+                            <td title="Petrecere">{row.party_attending ? '✅' : '❌'}</td>
                             <td>{formatDate(row.updated_at)}</td>
                             <td>
                               <button
@@ -641,6 +853,58 @@ export default function Admin() {
             </div>
           </div>
         </details>
+
+        {mergeModalOpen && mergeTargetRow && (
+          <div className="admin-modal-backdrop" onClick={closeMergeModal} role="dialog" aria-modal="true" aria-labelledby="admin-merge-title">
+            <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+              <h2 id="admin-merge-title" className="admin-modal-title">Uneste rând în &quot;Vin&quot;</h2>
+              <p className="admin-modal-desc">
+                Alege rândul care va fi ascuns și afișat ca +1 la <strong>{mergeTargetRow.invitees?.name || mergeTargetRow.guest_name || '(anonim)'}</strong>.
+              </p>
+              <div className="admin-form-group">
+                <label htmlFor="admin-merge-source">Rând de unit (va fi ascuns)</label>
+                <select
+                  id="admin-merge-source"
+                  className="admin-input"
+                  value={mergeSourceRowId}
+                  onChange={(e) => onMergeSourceChange(e.target.value)}
+                >
+                  <option value="">— Alege —</option>
+                  {mergeCandidateRows.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.invitees?.name || row.guest_name || '(anonim)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="admin-form-group">
+                <label htmlFor="admin-merge-plus-one">Nume +1 (editează dacă e cazul)</label>
+                <input
+                  id="admin-merge-plus-one"
+                  type="text"
+                  className="admin-input"
+                  value={mergePlusOneName}
+                  onChange={(e) => setMergePlusOneName(e.target.value)}
+                  placeholder="Numele afișat ca +1"
+                />
+              </div>
+              {mergeError && <p className="admin-error">{mergeError}</p>}
+              <div className="admin-modal-actions">
+                <button type="button" className="admin-btn admin-btn-secondary" onClick={closeMergeModal}>
+                  Anuleaza
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn"
+                  onClick={handleMergeSubmit}
+                  disabled={!mergeSourceRowId || merging}
+                >
+                  {merging ? 'Se uneste...' : 'Uneste'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

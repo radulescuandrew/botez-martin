@@ -346,6 +346,119 @@
   font-weight: 700;
 }
 
+.admin-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.admin-show-merged-btn {
+  font-size: 12px;
+}
+
+.admin-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-add-vin-form {
+  margin: 10px 0 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-add-vin-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-add-vin-name {
+  min-width: 140px;
+  flex: 1;
+}
+
+.admin-add-vin-invitee {
+  min-width: 120px;
+  max-width: 180px;
+}
+
+.admin-add-vin-church {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-add-vin-church input {
+  margin: 0;
+}
+
+.admin-add-vin-btn {
+  flex-shrink: 0;
+}
+
+/* Merge modal */
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.admin-modal {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  max-width: 420px;
+  width: 100%;
+  padding: 20px;
+}
+
+.admin-modal-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.admin-modal-desc {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.admin-form-group {
+  margin-bottom: 14px;
+}
+
+.admin-form-group label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.admin-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
 /* Tablet and small desktop */
 @media (max-width: 768px) {
   .admin-page {
