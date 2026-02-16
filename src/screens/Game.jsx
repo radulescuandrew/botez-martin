@@ -7,6 +7,16 @@ import { useGameLoop } from '../game/useGameLoop'
 import { LEVEL } from '../game/level'
 import { fetchLeaderboard } from '../lib/leaderboard'
 
+function formatDuration(seconds) {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '–'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
 const BASE_CANVAS_WIDTH = 320
 const BASE_CANVAS_HEIGHT = 180
 const PORTRAIT_WIDTH = 225
@@ -563,6 +573,7 @@ export default function Game({
     }
     setWinScore(finalScore)
     setIsNewBestWin(isNewBest)
+    const runDurationSeconds = runStartTimeRef.current != null ? Math.max(0, Math.floor((Date.now() - runStartTimeRef.current) / 1000)) : 0
     if (onScoresChange) {
       onScoresChange({
         attempts,
@@ -573,6 +584,7 @@ export default function Game({
         bestScoreEasy: difficulty === 'easy' ? newBest : scoresFromSupabase?.bestScoreEasy ?? null,
         bestScoreMedium: difficulty === 'medium' ? newBest : scoresFromSupabase?.bestScoreMedium ?? null,
         bestScoreNightmare: difficulty === 'nightmare' ? newBest : scoresFromSupabase?.bestScoreNightmare ?? null,
+        runDurationSeconds,
       })
     }
 
@@ -690,6 +702,7 @@ export default function Game({
       localStorage.setItem(HIGH_SCORE_KEY, String(nextHigh))
       localStorage.setItem(BEST_SCORE_BY_DIFFICULTY_PREFIX + difficulty, String(newBest))
     }
+    const runDurationSeconds = runStartTimeRef.current != null ? Math.max(0, Math.floor((Date.now() - runStartTimeRef.current) / 1000)) : 0
     if (onScoresChange) {
       onScoresChange({
         attempts,
@@ -700,6 +713,7 @@ export default function Game({
         bestScoreEasy: difficulty === 'easy' ? newBest : scoresFromSupabase?.bestScoreEasy ?? null,
         bestScoreMedium: difficulty === 'medium' ? newBest : scoresFromSupabase?.bestScoreMedium ?? null,
         bestScoreNightmare: difficulty === 'nightmare' ? newBest : scoresFromSupabase?.bestScoreNightmare ?? null,
+        runDurationSeconds,
       })
     }
 
@@ -712,6 +726,27 @@ export default function Game({
   const handleWinVideoEnd = useCallback(() => {
     onReachEnd()
   }, [onReachEnd])
+
+  const handleGameOverRetry = useCallback(() => {
+    if (retryLocked || scoreSyncPending) return
+    if (onRunStartAudio) onRunStartAudio()
+    runAudioTriggeredRef.current = false
+    setIsNewHighScore(false)
+    runStartTimeRef.current = null
+    setElapsedSeconds(0)
+    setRunStarted(false)
+    const doRetry = () => {
+      if (onRetry) onRetry()
+      reset()
+      setGameOver(false)
+      setRetryLocked(false)
+    }
+    if (onRunStart && typeof onRunStart === 'function') {
+      Promise.resolve(onRunStart()).then(doRetry, doRetry)
+    } else {
+      doRetry()
+    }
+  }, [retryLocked, scoreSyncPending, onRunStartAudio, onRunStart, onRetry, reset])
 
   const handlePointerDown = (e) => {
     e.preventDefault()
@@ -730,24 +765,7 @@ export default function Game({
     }
 
     if (gameOver) {
-      if (retryLocked || scoreSyncPending) return
-      if (onRunStartAudio) onRunStartAudio()
-      runAudioTriggeredRef.current = false
-      setIsNewHighScore(false)
-      runStartTimeRef.current = null
-      setElapsedSeconds(0)
-      setRunStarted(false)
-      const doRetry = () => {
-        if (onRetry) onRetry()
-        reset()
-        setGameOver(false)
-        setRetryLocked(false)
-      }
-      if (onRunStart && typeof onRunStart === 'function') {
-        Promise.resolve(onRunStart()).then(doRetry, doRetry)
-      } else {
-        doRetry()
-      }
+      handleGameOverRetry()
     } else {
       if (scrollX <= 0 && onRunStartAudio && !runAudioTriggeredRef.current) {
         runAudioTriggeredRef.current = true
@@ -1063,7 +1081,11 @@ export default function Game({
       />
       {gameOver && (
         <div ref={overlayRef} className="game-over-overlay">
-          <div className="game-over-card">
+          <div
+            className="game-over-card"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
             <p className="game-over-title">Game over!</p>
             <p className="game-over-score">Last score: {lastScore}</p>
             <p className={`game-over-score ${isNewHighScore ? 'highscore-hit' : ''}`}>
@@ -1072,22 +1094,52 @@ export default function Game({
             <p className="game-over-prize">100 € pentru cel mai bun scor 💰 💵 💶</p>
             {isNewHighScore && <p className="new-high-badge">New High Score</p>}
             {topTenRows.length > 0 && (
-              <div className="gameover-top3 gameover-top10">
-                <p className="gameover-top3-title">Top 10 performante</p>
-                {topTenRows.map((row, idx) => {
-                  const raw = row.best_difficulty ?? row.difficulty ?? 'medium'
-                  const d = raw === 'easy' || raw === 'nightmare' ? raw : 'medium'
-                  const displayName = row.isCurrentUser ? `${row.username || 'Tu'} (tu)` : (row.username || '(anonim)')
-                  return (
-                    <p key={`top10-${idx}-${row.username ?? ''}-${row.high_score ?? 0}`} className={`gameover-top3-row${row.isCurrentUser ? ' gameover-top3-row-you' : ''}`}>
-                      {idx + 1}. {displayName} - {row.high_score ?? 0}{' '}
-                      <span className={`difficulty-badge difficulty-badge-${d}`} title={d} aria-label={d}>
-                        {d === 'easy' ? 'E' : d === 'nightmare' ? 'N' : 'M'}
-                      </span>{' '}
-                      - {row.total_attempts ?? 0} incercari
-                    </p>
-                  )
-                })}
+              <div className="gameover-top10">
+                <p className="gameover-top10-title">Top 10 performante</p>
+                <div
+                  className="gameover-top10-table-wrap"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <table className="gameover-top10-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Jucator</th>
+                        <th>Scor</th>
+                        <th>Diff</th>
+                        <th>Inc.</th>
+                        <th>Timp record</th>
+                        <th>Timp total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topTenRows.map((row, idx) => {
+                        const raw = row.best_difficulty ?? row.difficulty ?? 'medium'
+                        const d = raw === 'easy' || raw === 'nightmare' ? raw : 'medium'
+                        const displayName = row.isCurrentUser ? `${row.username || 'Tu'} (tu)` : (row.username || '(anonim)')
+                        return (
+                          <tr
+                            key={`top10-${idx}-${row.username ?? ''}-${row.high_score ?? 0}`}
+                            className={row.isCurrentUser ? 'gameover-top10-row-you' : ''}
+                          >
+                            <td>{idx + 1}</td>
+                            <td className="gameover-top10-name">{displayName}</td>
+                            <td>{row.high_score ?? 0}</td>
+                            <td>
+                              <span className={`difficulty-badge difficulty-badge-${d}`} title={d} aria-label={d}>
+                                {d === 'easy' ? 'E' : d === 'nightmare' ? 'N' : 'M'}
+                              </span>
+                            </td>
+                            <td>{row.total_attempts ?? 0}</td>
+                            <td>{formatDuration(row.best_run_seconds)}</td>
+                            <td>{formatDuration(row.total_play_seconds)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
             {(retryLocked || scoreSyncPending) && (
@@ -1110,7 +1162,16 @@ export default function Game({
               </div>
             )}
             {!retryLocked && !scoreSyncPending && (
-              <p className="game-over-hint">Tap to try again</p>
+              <button
+                type="button"
+                className="game-over-try-again-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleGameOverRetry()
+                }}
+              >
+                Try again
+              </button>
             )}
           </div>
         </div>

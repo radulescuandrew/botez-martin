@@ -1,3 +1,13 @@
+function formatDuration(seconds) {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '–'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
 export default function LeaderboardModal({ open, onClose, rows = [], loading = false, error = '' }) {
   if (!open) return null
 
@@ -21,12 +31,14 @@ export default function LeaderboardModal({ open, onClose, rows = [], loading = f
                     <th>Scor</th>
                     <th>Dificultate</th>
                     <th>Incercari</th>
+                    <th>Timp record</th>
+                    <th>Timp total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={5}>Nu exista scoruri inca.</td>
+                      <td colSpan={7}>Nu exista scoruri inca.</td>
                     </tr>
                   ) : (
                     rows.map((row, idx) => {
@@ -43,6 +55,8 @@ export default function LeaderboardModal({ open, onClose, rows = [], loading = f
                             </span>
                           </td>
                           <td>{row.total_attempts ?? 0}</td>
+                          <td>{formatDuration(row.best_run_seconds)}</td>
+                          <td>{formatDuration(row.total_play_seconds)}</td>
                         </tr>
                       )
                     })

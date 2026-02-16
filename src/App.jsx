@@ -139,6 +139,7 @@ async function trySyncPendingProgressOnLoad(supabaseClient) {
     intro_seen: typeof pl.introSeen === 'boolean' ? pl.introSeen : false,
     difficulty: pl.difficulty === 'easy' || pl.difficulty === 'medium' || pl.difficulty === 'nightmare' ? pl.difficulty : 'medium',
     last_score: Number.isFinite(pl.lastScore) && pl.lastScore >= 0 ? pl.lastScore : 0,
+    run_duration_seconds: Number.isFinite(pl.runDurationSeconds) ? pl.runDurationSeconds : 0,
   }
   const encrypted = await encryptProgressPayload(plain)
   if (!encrypted) return
@@ -438,6 +439,7 @@ export default function App() {
         intro_seen: typeof payload?.introSeen === 'boolean' ? payload.introSeen : p.hasSeenIntro,
         difficulty: payload?.difficulty ?? p.difficulty,
         last_score: payload?.lastScore ?? lastScore,
+        run_duration_seconds: Number.isFinite(payload?.runDurationSeconds) ? payload.runDurationSeconds : 0,
       }
       const encrypted = await encryptProgressPayload(plain)
       if (!encrypted) return { success: false, error: 'Encryption not configured', gen: syncGenerationRef.current }

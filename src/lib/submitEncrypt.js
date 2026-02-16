@@ -23,7 +23,7 @@ function uint8ArrayToBase64(u8) {
 }
 
 /**
- * @param {Object} payload - { attempts, username, intro_seen, difficulty, last_score }
+ * @param {Object} payload - { attempts, username, intro_seen, difficulty, last_score, run_duration_seconds }
  * @returns {Promise<string|null>} base64(iv||ciphertext) or null if key missing / encrypt fails
  */
 export async function encryptProgressPayload(payload) {
@@ -36,6 +36,7 @@ export async function encryptProgressPayload(payload) {
     intro_seen: payload.intro_seen ?? false,
     difficulty: payload.difficulty ?? 'medium',
     last_score: payload.last_score ?? 0,
+    run_duration_seconds: Math.max(0, Math.min(3600, Number.isFinite(payload.run_duration_seconds) ? payload.run_duration_seconds : 0)),
   })
   try {
     const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-CBC', false, ['encrypt'])
