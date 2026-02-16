@@ -1001,7 +1001,15 @@ export default function Game({
         error={leaderboardError}
       />
       {winPhase === 'transition' && (
-        <BlackHoleTransition active durationMs={WIN_TRANSITION_MS} showStory={false} />
+        <BlackHoleTransition
+          active
+          durationMs={WIN_TRANSITION_MS}
+          showStory={false}
+          onSkip={() => {
+            winPhaseRef.current = 'video'
+            setWinPhase('video')
+          }}
+        />
       )}
       {winPhase === 'video' && (
         <div className="win-video-overlay">

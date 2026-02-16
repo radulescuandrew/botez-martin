@@ -81,7 +81,7 @@ const CRAWL_SPAWN_INTERVAL_MS = Math.max(2800, Math.floor(CRAWL_TRAVEL_MS / (CRA
 
 const CRAWL_AUDIO_SRC = '/starwars.mp3'
 
-export default function BlackHoleTransition({ active, showStory = true }) {
+export default function BlackHoleTransition({ active, showStory = true, onSkip }) {
   const [activeLines, setActiveLines] = useState([])
   const timersRef = useRef([])
   const audioRef = useRef(null)
@@ -142,6 +142,16 @@ export default function BlackHoleTransition({ active, showStory = true }) {
       style={{ '--travel-duration': `${travelDuration}ms` }}
       aria-hidden="true"
     >
+      {active && onSkip && (
+        <button
+          type="button"
+          className="blackhole-skip-btn"
+          onClick={onSkip}
+          aria-label="Skip"
+        >
+          Skip
+        </button>
+      )}
       <Canvas camera={{ position: [0, 0, 7], fov: 58 }} dpr={[1, 2]} gl={{ antialias: true }}>
         <Scene active={active} />
       </Canvas>

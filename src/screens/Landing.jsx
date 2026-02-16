@@ -29,6 +29,8 @@ export default function Landing({ onPlay, onPlayIntent, attempts, initialUsernam
   }, [])
 
   const nameToUseRef = useRef(null)
+  const transitionTimeoutRef = useRef(null)
+  const transitionTweenRef = useRef(null)
 
   const startTransition = (nameToUse) => {
     setError('')
@@ -45,7 +47,7 @@ export default function Landing({ onPlay, onPlayIntent, attempts, initialUsernam
 
     const container = containerRef.current
     if (container) {
-      gsap.to(container, {
+      const tween = gsap.to(container, {
         opacity: 0,
         scale: 1.08,
         rotationX: 10,
@@ -54,8 +56,26 @@ export default function Landing({ onPlay, onPlayIntent, attempts, initialUsernam
         ease: 'power2.in',
         onComplete: complete,
       })
+      transitionTweenRef.current = tween
     }
-    setTimeout(complete, TRANSITION_MS + 500)
+    transitionTimeoutRef.current = window.setTimeout(complete, TRANSITION_MS + 500)
+  }
+
+  const handleSkipTransition = () => {
+    if (transitionTimeoutRef.current != null) {
+      window.clearTimeout(transitionTimeoutRef.current)
+      transitionTimeoutRef.current = null
+    }
+    if (transitionTweenRef.current != null) {
+      transitionTweenRef.current.kill()
+      transitionTweenRef.current = null
+    }
+    const name = nameToUseRef.current
+    if (name != null) {
+      nameToUseRef.current = null
+      onPlay(name)
+    }
+    setIsTransitioning(false)
   }
 
   const handlePlay = () => {
@@ -140,7 +160,7 @@ export default function Landing({ onPlay, onPlayIntent, attempts, initialUsernam
           />
         </div>
       </div>
-      <BlackHoleTransition active={isTransitioning} durationMs={TRANSITION_MS} />
+      <BlackHoleTransition active={isTransitioning} durationMs={TRANSITION_MS} onSkip={handleSkipTransition} />
     </>
   )
 }
