@@ -253,10 +253,12 @@ export function useGameLoop({
   const frameCountRef = useRef(0)
   const collectibles = level.collectibles || []
   const collectedIdsRef = useRef(new Set())
-  const gameStateRef = useRef({ kid, planets, scrollX, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current })
+  const gameStateRef = useRef({ kid, planets, scrollX, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current, blackHoles: [] })
   const scrollSpeed = level.scrollSpeed ?? 3
   const obstaclesSource = level.obstacles || level.gates || []
   const hasMovingObstacles = obstaclesSource.some((o) => o.moveY)
+  const blackHoles = level.blackHoles || []
+  const BLACKHOLE_PULL_STRENGTH = 28
 
   const reset = useCallback(() => {
     startedRef.current = false
@@ -286,9 +288,9 @@ export function useGameLoop({
     setPlanets(resetPlanets)
     scrollRef.current = 0
     setScrollX(0)
-    gameStateRef.current = { kid: kidState, planets: resetPlanets, scrollX: 0, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current }
+    gameStateRef.current = { kid: kidState, planets: resetPlanets, scrollX: 0, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current, blackHoles }
     setRestartCounter((c) => c + 1)
-  }, [level.obstacles, level.gates, level.length, level.planetProfile, level.collectibles, kidScreenX, canvasHeight, canvasWidth, groundY, kidWidth, kidHeight, devFastFinish, onReset])
+  }, [level.obstacles, level.gates, level.length, level.planetProfile, level.collectibles, level.blackHoles, kidScreenX, canvasHeight, canvasWidth, groundY, kidWidth, kidHeight, devFastFinish, onReset])
 
   useEffect(() => {
     kidScreenXRef.current = kidScreenX
@@ -350,7 +352,7 @@ export function useGameLoop({
         setKid(kidState)
         setPlanets(staticPlanetsData)
         setScrollX(scr)
-        gameStateRef.current = { kid: kidState, planets: staticPlanetsData, scrollX: scr, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current }
+        gameStateRef.current = { kid: kidState, planets: staticPlanetsData, scrollX: scr, groundY, earthHit: null, collectibles, collectedIds: collectedIdsRef.current, blackHoles }
         rafId = requestAnimationFrame(tick)
         return
       }
@@ -391,12 +393,31 @@ export function useGameLoop({
         return
       }
 
+      const kx = kidScreenXRef.current
       const speedMult = typeof getScrollSpeedMultiplier === 'function' ? getScrollSpeedMultiplier(scr) : 1
       scrollRef.current = scr + scrollSpeed * speedMult * step
       const newScroll = scrollRef.current
       setScrollX(newScroll)
 
-      const kx = kidScreenXRef.current
+      const kidWorldX = newScroll + kx
+      const kidWorldY = k.y
+
+      for (const bh of blackHoles) {
+        const dx = bh.x - kidWorldX
+        const dy = bh.y - kidWorldY
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < (bh.absorbRadius ?? 10)) {
+          gameOverRef.current = true
+          onGameOver()
+          return
+        }
+        const pullRadius = bh.pullRadius ?? 32
+        if (dist < pullRadius && dist > 0) {
+          const pullFactor = (pullRadius - dist) / pullRadius
+          k.velY += BLACKHOLE_PULL_STRENGTH * pullFactor * (dy / dist) * deltaSeconds
+        }
+      }
+
       const kidBox = {
         x: kx + inL,
         y: k.y + inT,
@@ -428,6 +449,7 @@ export function useGameLoop({
               groundY,
               collectibles,
               collectedIds: collectedIdsRef.current,
+              blackHoles,
               earthHit: {
                 earth: planet,
                 scrollX: newScroll,
@@ -488,7 +510,7 @@ export function useGameLoop({
       }
 
       // Update ref every frame (for draw loop), but throttle state updates
-      gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: newScroll, groundY, collectibles, collectedIds: collectedIdsRef.current }
+      gameStateRef.current = { kid: kidState, planets: planetsData, scrollX: newScroll, groundY, collectibles, collectedIds: collectedIdsRef.current, blackHoles }
 
       // Only update React state every 2 frames to reduce re-renders
       if (frameCountRef.current % 2 === 0) {
@@ -502,7 +524,7 @@ export function useGameLoop({
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [level.obstacles, level.gates, level.length, level.planetProfile, level.collectibles, canvasWidth, groundY, scrollSpeed, getScrollSpeedMultiplier, onCollect, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish, hasMovingObstacles, obstaclesSource])
+  }, [level.obstacles, level.gates, level.length, level.planetProfile, level.collectibles, level.blackHoles, canvasWidth, groundY, scrollSpeed, getScrollSpeedMultiplier, onCollect, onReachEnd, onGameOver, flapRef, restartCounter, kidWidth, kidHeight, inT, inB, inL, inR, devFastFinish, hasMovingObstacles, obstaclesSource, blackHoles])
 
   return {
     kid,

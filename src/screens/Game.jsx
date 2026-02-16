@@ -295,6 +295,19 @@ export default function Game({
         lastX - 180,
         240
       )
+      const blackHoles = []
+      const firstBlackHoleAt = 400
+      const blackHoleSpacing = 2200
+      for (let x = firstBlackHoleAt; x < lastX - 300; x += blackHoleSpacing) {
+        const seed = x * 0.13
+        const y = Math.round(LEVEL.groundY * (0.35 + seededUnit(seed) * 0.4))
+        blackHoles.push({
+          x,
+          y,
+          pullRadius: 32,
+          absorbRadius: 10,
+        })
+      }
       difficultyLevel = {
         ...LEVEL,
         length: nightmareLength,
@@ -303,6 +316,7 @@ export default function Game({
         obstacles: nightmareObstacles,
         planetProfile: { sideMode: 'normal', radiusScale: 1.06 },
         collectibles,
+        blackHoles,
       }
     } else if (difficulty === 'medium') {
       const mediumCollectibles = buildCollectibles(
@@ -359,6 +373,15 @@ export default function Game({
           y: Math.round(c.y * yScale),
         }))
       : undefined
+    const scaledBlackHoles = difficultyLevel.blackHoles
+      ? difficultyLevel.blackHoles.map((bh) => ({
+          ...bh,
+          x: bh.x + PORTRAIT_FIRST_OBSTACLE_OFFSET,
+          y: Math.round(bh.y * yScale),
+          pullRadius: Math.round((bh.pullRadius ?? 32) * yScale),
+          absorbRadius: Math.round((bh.absorbRadius ?? 10) * yScale),
+        }))
+      : undefined
     return {
       ...difficultyLevel,
       length: difficultyLevel.length + PORTRAIT_FIRST_OBSTACLE_OFFSET,
@@ -371,6 +394,7 @@ export default function Game({
       gates: offsetGates,
       obstacles: scaledObstacles,
       collectibles: scaledCollectibles ?? difficultyLevel.collectibles,
+      blackHoles: scaledBlackHoles ?? difficultyLevel.blackHoles,
     }
   }, [isMobile, logicalHeight, logicalWidth, difficulty])
 
@@ -710,6 +734,48 @@ export default function Game({
       ctx.fillRect(0, state.groundY, logicalWidth * 2, logicalHeight - state.groundY)
       ctx.fillStyle = '#6a5acd'
       ctx.fillRect(0, state.groundY - 1.5, logicalWidth * 2, 2.5)
+
+      // Black holes (2D: smaller event horizon + accretion disk)
+      if (state.blackHoles?.length) {
+        const time = Date.now() / 1000
+        state.blackHoles.forEach((bh) => {
+          const px = bh.x - state.scrollX
+          const innerR = bh.absorbRadius ?? 10
+          const diskR = innerR + 8
+          const glowR = diskR + 6
+          if (px + glowR + 5 < -10 || px - glowR - 5 > logicalWidth + 10) return
+          const py = bh.y
+          ctx.save()
+          const gradient = ctx.createRadialGradient(px, py, 0, px, py, glowR)
+          gradient.addColorStop(0, 'rgba(80, 20, 10, 0.35)')
+          gradient.addColorStop(0.6, 'rgba(200, 80, 30, 0.15)')
+          gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+          ctx.fillStyle = gradient
+          ctx.beginPath()
+          ctx.arc(px, py, glowR, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = 'rgba(255, 120, 50, 0.5)'
+          ctx.lineWidth = 1.5
+          ctx.beginPath()
+          ctx.arc(px, py, diskR, 0, Math.PI * 2)
+          ctx.stroke()
+          const rot = time * 0.6
+          for (let i = 0; i < 3; i += 1) {
+            const a0 = rot + (i * Math.PI * 2) / 3
+            const a1 = a0 + Math.PI * 0.5
+            ctx.beginPath()
+            ctx.arc(px, py, diskR, a0, a1)
+            ctx.strokeStyle = `rgba(255, ${140 - i * 25}, ${60 + i * 15}, 0.85)`
+            ctx.lineWidth = 2.5
+            ctx.stroke()
+          }
+          ctx.fillStyle = '#000000'
+          ctx.beginPath()
+          ctx.arc(px, py, innerR, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.restore()
+        })
+      }
 
       // Toys as gates + goal (timbo theme)
       if (state.planets) {
