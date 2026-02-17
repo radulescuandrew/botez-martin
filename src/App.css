@@ -1304,6 +1304,54 @@
   border-bottom-color: rgba(255, 227, 137, 0.25);
 }
 
+/* Responsive styles for smaller devices */
+@media (max-width: 900px), (pointer: coarse) {
+  .game-over-card {
+    padding: 0.6rem 0.5rem;
+  }
+
+  .gameover-top10 {
+    max-height: min(50vh, 400px);
+  }
+
+  .gameover-top10-title {
+    font-size: 0.8rem;
+  }
+
+  .gameover-top10-table {
+    font-size: clamp(0.65rem, 1.5vw, 0.85rem);
+  }
+
+  .gameover-top10-table th,
+  .gameover-top10-table td {
+    padding: 0.2rem 0.3rem;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 520px) {
+  .game-over-card {
+    padding: 0.5rem 0.4rem;
+  }
+
+  .gameover-top10 {
+    max-height: min(45vh, 350px);
+  }
+
+  .gameover-top10-title {
+    font-size: 0.75rem;
+  }
+
+  .gameover-top10-table {
+    font-size: clamp(0.6rem, 1.2vw, 0.75rem);
+  }
+
+  .gameover-top10-table th,
+  .gameover-top10-table td {
+    padding: 0.15rem 0.25rem;
+  }
+}
+
 .highscore-hit {
   color: #ffe990;
   animation: high-score-pop 0.9s ease-in-out infinite;
