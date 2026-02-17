@@ -1,24 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase, isSupabaseEnabled } from '../lib/supabase'
+import { isSupabaseEnabled } from '../lib/supabase'
+import { issueInviteSession, setStoredInvite, isValidInviteUuid } from '../lib/inviteAuth'
 import './InvitePage.css'
-
-const INVITE_STORAGE_KEY = 'martins_baptism_invite'
-
-function setStoredInvite(inviteId, inviteeName, inviteToken) {
-  try {
-    localStorage.setItem(
-      INVITE_STORAGE_KEY,
-      JSON.stringify({
-        inviteId: inviteId ?? '',
-        inviteeName: inviteeName ?? '',
-        inviteToken: inviteToken ?? null,
-      })
-    )
-  } catch {
-    /* localStorage not available */
-  }
-}
 
 export default function InvitePage() {
   const { inviteId } = useParams()
@@ -30,7 +14,7 @@ export default function InvitePage() {
       setStatus('error')
       return
     }
-    if (!isSupabaseEnabled() || !supabase) {
+    if (!isSupabaseEnabled()) {
       navigate('/', { replace: true })
       return
     }
@@ -40,26 +24,15 @@ export default function InvitePage() {
     async function run() {
       try {
         const uuid = inviteId.trim()
-        if (!uuid) {
+        if (!uuid || !isValidInviteUuid(uuid)) {
           if (!cancelled) setStatus('error')
           return
         }
-
-        const { data: issueData, error: issueErr } = await supabase.rpc('issue_invite_token', {
-          p_invite_id: uuid,
-        })
-        if (cancelled || issueErr || !issueData) {
-          if (!cancelled) setStatus('error')
-          return
-        }
-        const token = issueData.token ?? ''
-        const name = issueData.name ?? ''
-
-        await supabase.rpc('record_invite_join', { p_invite_id: uuid })
+        const session = await issueInviteSession(uuid)
         if (cancelled) return
 
-        setStoredInvite(uuid, name, token)
-        navigate('/', { replace: true, state: { fromInvite: true, inviteId: uuid, inviteeName: name, inviteToken: token } })
+        setStoredInvite(session.inviteId, session.inviteeName, session.inviteToken)
+        navigate('/', { replace: true, state: { fromInvite: true, inviteId: session.inviteId, inviteeName: session.inviteeName, inviteToken: session.inviteToken } })
       } catch {
         if (!cancelled) setStatus('error')
       }

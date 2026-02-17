@@ -10,6 +10,7 @@ import ChatButton from './components/ChatButton'
 import { supabase, isSupabaseEnabled } from './lib/supabase'
 import { fetchChatMessages, sendChatMessage } from './lib/chat'
 import { encryptProgressPayload } from './lib/submitEncrypt'
+import { getStoredInvite, setStoredInvite, extractInviteIdFromInput, isValidInviteUuid, issueInviteSession } from './lib/inviteAuth'
 import './App.css'
 
 const ATTEMPTS_KEY = 'martins_baptism_attempts'
@@ -20,39 +21,44 @@ const USERNAME_KEY = 'martins_baptism_username'
 const INTRO_SEEN_KEY = 'martins_baptism_intro_seen'
 const DIFFICULTY_KEY = 'martins_baptism_difficulty'
 const BEST_SCORE_PREFIX = 'martins_best_score_'
-const INVITE_STORAGE_KEY = 'martins_baptism_invite'
 const GAME_COMPLETED_KEY = 'martins_baptism_game_completed'
 const PENDING_PROGRESS_KEY = 'martins_baptism_pending_progress'
+const IOS_INSTALL_HIDE_FOREVER_KEY = 'martins_pwa_ios_install_hide_forever'
+const IOS_INSTALL_SNOOZE_UNTIL_KEY = 'martins_pwa_ios_install_snooze_until'
+const IOS_SNOOZE_MS = 10 * 60 * 1000
 
-/** Returns { inviteId, inviteeName, inviteToken } from localStorage. inviteToken = stable identity across browsers. */
-function getStoredInvite() {
+function isRunningStandalone() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+}
+
+function isIosSafari() {
+  if (typeof window === 'undefined') return false
+  const ua = window.navigator.userAgent || ''
+  const isIOS = /iP(ad|hone|od)/i.test(ua)
+  const isWebKit = /WebKit/i.test(ua)
+  const isCriOS = /CriOS/i.test(ua)
+  const isFxiOS = /FxiOS/i.test(ua)
+  const isEdgiOS = /EdgiOS/i.test(ua)
+  return isIOS && isWebKit && !isCriOS && !isFxiOS && !isEdgiOS
+}
+
+function readIosInstallHideForever() {
   try {
-    const raw = localStorage.getItem(INVITE_STORAGE_KEY)
-    if (!raw) return null
-    const data = JSON.parse(raw)
-    if (!data || typeof data.inviteeName !== 'string') return null
-    return {
-      inviteId: data.inviteId ?? '',
-      inviteeName: data.inviteeName ?? '',
-      inviteToken: typeof data.inviteToken === 'string' && data.inviteToken.length > 0 ? data.inviteToken : null,
-    }
+    return localStorage.getItem(IOS_INSTALL_HIDE_FOREVER_KEY) === '1'
   } catch {
-    return null
+    return false
   }
 }
 
-function setStoredInvite(inviteId, inviteeName, inviteToken = null) {
+function readIosInstallSnoozeUntil() {
   try {
-    localStorage.setItem(
-      INVITE_STORAGE_KEY,
-      JSON.stringify({
-        inviteId: inviteId ?? '',
-        inviteeName: inviteeName ?? '',
-        inviteToken: inviteToken ?? null,
-      })
-    )
+    const raw = localStorage.getItem(IOS_INSTALL_SNOOZE_UNTIL_KEY)
+    const parsed = Number.parseInt(raw ?? '0', 10)
+    if (!Number.isFinite(parsed) || parsed <= Date.now()) return 0
+    return parsed
   } catch {
-    /* localStorage not available (e.g. private) */
+    return 0
   }
 }
 
@@ -310,6 +316,16 @@ export default function App() {
   const [chatError, setChatError] = useState('')
   const [chatSending, setChatSending] = useState(false)
   const [chatLastReadAt, setChatLastReadAtState] = useState(readChatLastReadAt)
+  const [inviteInput, setInviteInput] = useState('')
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteError, setInviteError] = useState('')
+  const [isStandalone, setIsStandalone] = useState(() => isRunningStandalone())
+  const [iosBannerDismissedSession, setIosBannerDismissedSession] = useState(false)
+  const [iosDontShowAgain, setIosDontShowAgain] = useState(false)
+  const [iosHideForever, setIosHideForever] = useState(readIosInstallHideForever)
+  const [iosSnoozeUntil, setIosSnoozeUntil] = useState(readIosInstallSnoozeUntil)
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null)
+  const [androidBannerDismissed, setAndroidBannerDismissed] = useState(false)
 
   const chatPollTimerRef = useRef(null)
   const chatClosedPollTimerRef = useRef(null)
@@ -353,6 +369,36 @@ export default function App() {
     }
   }, [location.state, navigate])
 
+  useEffect(() => {
+    const media = window.matchMedia('(display-mode: standalone)')
+    const updateStandalone = () => setIsStandalone(isRunningStandalone())
+    updateStandalone()
+    media.addEventListener('change', updateStandalone)
+    window.addEventListener('appinstalled', updateStandalone)
+    return () => {
+      media.removeEventListener('change', updateStandalone)
+      window.removeEventListener('appinstalled', updateStandalone)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault()
+      setDeferredInstallPrompt(event)
+      setAndroidBannerDismissed(false)
+    }
+    const handleAppInstalled = () => {
+      setDeferredInstallPrompt(null)
+      setAndroidBannerDismissed(true)
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    window.addEventListener('appinstalled', handleAppInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', handleAppInstalled)
+    }
+  }, [])
+
   const hydrateProgressFromInviteToken = useCallback(async (token) => {
     if (!supabase || !token) return
     setProgressLoaded(true)
@@ -378,6 +424,67 @@ export default function App() {
     }
   }, [])
 
+  const handleInviteRecoverySubmit = useCallback(async (event) => {
+    event.preventDefault()
+    if (inviteLoading) return
+    setInviteError('')
+    const inviteId = extractInviteIdFromInput(inviteInput)
+    if (!isValidInviteUuid(inviteId)) {
+      setInviteError('Link sau cod invalid.')
+      return
+    }
+
+    try {
+      setInviteLoading(true)
+      const session = await issueInviteSession(inviteId)
+      setStoredInvite(session.inviteId, session.inviteeName, session.inviteToken)
+      setUsername(session.inviteeName || '')
+      setAuthFailed(false)
+      setProgressLoaded(true)
+      await hydrateProgressFromInviteToken(session.inviteToken)
+      setInviteInput('')
+      setInviteError('')
+    } catch {
+      setInviteError('Link sau cod invalid.')
+    } finally {
+      setInviteLoading(false)
+    }
+  }, [inviteLoading, inviteInput, hydrateProgressFromInviteToken])
+
+  const handleAndroidInstall = useCallback(async () => {
+    if (!deferredInstallPrompt) return
+    try {
+      await deferredInstallPrompt.prompt()
+      await deferredInstallPrompt.userChoice
+    } finally {
+      setDeferredInstallPrompt(null)
+    }
+  }, [deferredInstallPrompt])
+
+  const handleIosInstallClose = useCallback(() => {
+    if (iosDontShowAgain) {
+      try {
+        localStorage.setItem(IOS_INSTALL_HIDE_FOREVER_KEY, '1')
+      } catch {
+        /* ignore */
+      }
+      setIosHideForever(true)
+      return
+    }
+    setIosBannerDismissedSession(true)
+  }, [iosDontShowAgain])
+
+  const handleIosInstallLater = useCallback(() => {
+    const until = Date.now() + IOS_SNOOZE_MS
+    try {
+      localStorage.setItem(IOS_INSTALL_SNOOZE_UNTIL_KEY, String(until))
+    } catch {
+      /* ignore */
+    }
+    setIosSnoozeUntil(until)
+    setIosBannerDismissedSession(true)
+  }, [])
+
   const markGameCompletedToSupabase = useCallback(async () => {
     if (!useSupabaseProgress || !supabase) return
     const invite = getStoredInvite()
@@ -388,7 +495,6 @@ export default function App() {
 
   useEffect(() => {
     if (!useSupabaseProgress || !supabase) return
-    let cancelled = false
     const invite = getStoredInvite()
 
     const boot = async () => {
@@ -403,7 +509,6 @@ export default function App() {
     }
 
     boot()
-    return () => { cancelled = true }
   }, [useSupabaseProgress, hydrateProgressFromInviteToken])
 
   const startGameSession = useCallback(async () => {
@@ -592,7 +697,7 @@ export default function App() {
     if (useSupabaseProgress && lastSyncPromiseRef.current) {
       try {
         await lastSyncPromiseRef.current
-      } catch (_) {
+      } catch {
         // already surfaced via scoreSyncStatus
       }
     }
@@ -792,40 +897,135 @@ export default function App() {
     }
   }, [screen])
 
+  const showAndroidInstallBanner = Boolean(
+    deferredInstallPrompt &&
+    !isStandalone &&
+    !isIosSafari() &&
+    !androidBannerDismissed &&
+    !isLargeScreen
+  )
+
+  const showIosInstallBanner = Boolean(
+    isIosSafari() &&
+    !isStandalone &&
+    !iosHideForever &&
+    !iosBannerDismissedSession &&
+    (iosSnoozeUntil <= Date.now()) &&
+    !isLargeScreen
+  )
+
+  const renderInstallBanners = () => (
+    <>
+      {showAndroidInstallBanner && (
+        <section className="pwa-install-banner pwa-install-banner-android" role="dialog" aria-live="polite">
+          <div className="pwa-install-copy">
+            <p className="pwa-install-title">Instaleaza aplicatia</p>
+            <p className="pwa-install-text">Acces mai rapid direct din telefon.</p>
+          </div>
+          <div className="pwa-install-actions">
+            <button type="button" className="pwa-install-secondary-btn" onClick={() => setAndroidBannerDismissed(true)}>
+              Inchide
+            </button>
+            <button type="button" className="pwa-install-primary-btn" onClick={handleAndroidInstall}>
+              Instaleaza aplicatia
+            </button>
+          </div>
+        </section>
+      )}
+
+      {showIosInstallBanner && (
+        <section className="pwa-install-banner pwa-install-banner-ios" role="dialog" aria-live="polite">
+          <p className="pwa-install-title">Adauga pe ecranul principal</p>
+          <p className="pwa-install-text">
+            In Safari: apasa pe Share, apoi pe <strong>Add to Home Screen</strong>.
+          </p>
+          <div className="pwa-install-ios-row">
+            <label className="pwa-install-checkbox">
+              <input
+                type="checkbox"
+                checked={iosDontShowAgain}
+                onChange={(e) => setIosDontShowAgain(e.target.checked)}
+              />
+              <span>Nu mai arata</span>
+            </label>
+            <button type="button" className="pwa-install-later-btn" onClick={handleIosInstallLater}>
+              Mai tarziu
+            </button>
+          </div>
+          <div className="pwa-install-actions">
+            <button type="button" className="pwa-install-primary-btn" onClick={handleIosInstallClose}>
+              Am inteles
+            </button>
+          </div>
+        </section>
+      )}
+    </>
+  )
+
+  const renderUnknownUserGate = () => (
+    <div className="app-loading app-unknown-user" role="alert">
+      <p className="app-auth-error-title">Nu stim cine esti</p>
+      <p className="app-auth-error-text">Acceseaza linkul primit pentru a intra.</p>
+      <form className="app-invite-recovery-form" onSubmit={handleInviteRecoverySubmit}>
+        <label htmlFor="invite-recovery-input" className="app-invite-recovery-label">
+          Introdu linkul de invitatie sau codul UUID
+        </label>
+        <input
+          id="invite-recovery-input"
+          className="app-invite-recovery-input"
+          type="text"
+          value={inviteInput}
+          onChange={(e) => setInviteInput(e.target.value)}
+          placeholder="https://exemplu.ro/invite/00000000-0000-0000-0000-000000000000"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <p className="app-invite-recovery-help">
+          Poti introduce linkul complet sau doar codul de la final (UUID).
+        </p>
+        {inviteError && (
+          <p className="app-invite-recovery-error" aria-live="polite">
+            {inviteError}
+          </p>
+        )}
+        <button type="submit" className="app-auth-error-btn" disabled={inviteLoading}>
+          {inviteLoading ? 'Se valideaza...' : 'Intra'}
+        </button>
+      </form>
+    </div>
+  )
+
   if (useSupabaseProgress && authFailed) {
     return (
-      <main className="app">
-        <div className="app-loading app-unknown-user" role="alert">
-          <p className="app-auth-error-title">Nu stim cine esti</p>
-          <p className="app-auth-error-text">Acceseaza linkul primit pentru a intra.</p>
-        </div>
+      <main className={isMobilePortrait ? 'app app-mobile-portrait' : 'app'}>
+        {renderUnknownUserGate()}
+        {renderInstallBanners()}
       </main>
     )
   }
 
   if (useSupabaseProgress && !progressLoaded) {
     return (
-      <main className="app">
+      <main className={isMobilePortrait ? 'app app-mobile-portrait' : 'app'}>
         <div className="app-loading" role="status" aria-live="polite">
           <p>Se incarca...</p>
         </div>
+        {renderInstallBanners()}
       </main>
     )
   }
 
   if (!username.trim() && !gameCompleted) {
     return (
-      <main className="app">
-        <div className="app-loading app-unknown-user" role="alert">
-          <p className="app-auth-error-title">Nu stim cine esti</p>
-          <p className="app-auth-error-text">Acceseaza linkul primit pentru a intra.</p>
-        </div>
+      <main className={isMobilePortrait ? 'app app-mobile-portrait' : 'app'}>
+        {renderUnknownUserGate()}
+        {renderInstallBanners()}
       </main>
     )
   }
 
   return (
-    <main className="app">
+    <main className={isMobilePortrait ? 'app app-mobile-portrait' : 'app'}>
       {isLargeScreen && (
         <div className="use-mobile-overlay" role="alert" aria-live="polite">
           <div className="use-mobile-content">
@@ -937,6 +1137,7 @@ export default function App() {
           />
         </>
       )}
+      {renderInstallBanners()}
     </main>
   )
 }
